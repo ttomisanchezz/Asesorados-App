@@ -647,10 +647,10 @@ export default function Landing() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-[#0a0a0f] text-white overflow-x-hidden pb-24 md:pb-0">
 
       {/* ── STICKY MOBILE CTA ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0a0a0f]/95 backdrop-blur-md border-t border-white/[0.06] px-4 py-3">
+      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#0a0a0f]/95 backdrop-blur-md border-t border-white/[0.06] px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <button
           onClick={() => window.open(WHATSAPP_URL, '_blank')}
           className="w-full bg-accent text-white font-semibold rounded-xl py-3.5 text-base flex items-center justify-center gap-2 shadow-glow active:scale-[0.98] transition-transform"
@@ -667,12 +667,12 @@ export default function Landing() {
             : 'border-white/[0.05] shadow-none'
         }`}
       >
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5 shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-accent flex items-center justify-center shrink-0">
               <Zap size={15} className="text-white" />
             </div>
-            <span className="font-bold text-white tracking-tight text-sm sm:text-base">
+            <span className="font-bold text-white tracking-tight text-sm sm:text-base truncate">
               Asesoramiento Fitness
             </span>
           </div>
@@ -689,14 +689,18 @@ export default function Landing() {
             </a>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => navigate('/login')}
               className="hidden sm:block text-slate-400 hover:text-white text-sm transition-colors duration-150 px-3 py-2 rounded-xl hover:bg-white/5"
             >
               Ya soy alumno
             </button>
-            <Button size="sm" onClick={() => window.open(WHATSAPP_URL, '_blank')}>
+            <Button
+              size="sm"
+              onClick={() => window.open(WHATSAPP_URL, '_blank')}
+              className="shrink-0 !px-3 !py-2 !text-xs sm:!text-sm whitespace-nowrap"
+            >
               Quiero empezar
             </Button>
           </div>
@@ -704,28 +708,28 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section className="max-w-6xl mx-auto px-6 pt-14 pb-24">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 lg:pt-14 pb-16 sm:pb-20 lg:pb-24">
+        <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
 
           {/* Copy */}
           <div className="fade-up">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-xs font-semibold mb-7">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[11px] sm:text-xs font-semibold mb-5 sm:mb-7">
               <Star size={11} fill="currentColor" />
               Asesoramiento Fitness Personalizado
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight tracking-tight mb-6">
+            <h1 className="text-[2.35rem] sm:text-5xl font-bold text-white leading-[1.05] sm:leading-tight tracking-tight mb-5 sm:mb-6">
               Transformá tu físico con un plan claro, seguimiento semanal y{' '}
               <span className="text-gradient">ajustes reales</span>
             </h1>
-            <p className="text-slate-400 text-lg leading-relaxed mb-9">
+            <p className="text-slate-400 text-base sm:text-lg leading-relaxed mb-7 sm:mb-9">
               Entrenamiento personalizado, alimentación flexible y correcciones técnicas para que avances con método, datos y acompañamiento real.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 mb-7">
+            <div className="flex flex-col sm:flex-row gap-3 mb-5 sm:mb-7">
               <Button
                 size="lg"
                 iconRight={ArrowRight}
                 onClick={() => handleScrollTo('como-funciona')}
-                className="active:scale-[0.98] transition-transform"
+                className="w-full sm:w-auto justify-center active:scale-[0.98] transition-transform"
               >
                 Quiero empezar mi asesoría
               </Button>
@@ -733,7 +737,7 @@ export default function Landing() {
                 variant="secondary"
                 size="lg"
                 onClick={() => navigate('/login')}
-                className="active:scale-[0.98] transition-transform"
+                className="w-full sm:w-auto justify-center active:scale-[0.98] transition-transform"
               >
                 Ya soy alumno
               </Button>
@@ -745,30 +749,30 @@ export default function Landing() {
 
           {/* Foto hero */}
           <div className="fade-up flex justify-center lg:justify-end" style={{ transitionDelay: '0.1s' }}>
-            <div className="relative w-full max-w-[380px] sm:max-w-[420px] lg:max-w-[430px]">
+            <div className="relative w-full max-w-full sm:max-w-[420px] lg:max-w-[430px]">
 
               {/* ── IMAGEN PRINCIPAL — hero limpio ── */}
-              <div className="relative h-[360px] sm:h-[400px] lg:h-[520px] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl">
+              <div className="relative h-[380px] sm:h-[420px] lg:h-[520px] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl">
                 <img
                   src={COACH_HERO}
                   alt="Coach de asesoramiento fitness"
-                  className="w-full h-full object-cover object-top transition-transform duration-700 hover:scale-[1.02]"
+                  className="w-full max-w-full h-full object-cover object-top transition-transform duration-700 hover:scale-[1.02]"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/80 via-[#0a0a0f]/10 to-transparent" />
               </div>
 
               {/* Floating card */}
-              <div className="absolute -bottom-5 -left-4 right-4 sm:right-auto sm:w-64">
-                <div className="bg-[#111118]/95 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-4 shadow-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                      <TrendingUp size={18} className="text-emerald-400" />
+              <div className="absolute -bottom-4 left-1/2 w-[88%] -translate-x-1/2 sm:-left-4 sm:right-auto sm:w-64 sm:translate-x-0">
+                <div className="bg-[#111118]/95 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-3 sm:p-4 shadow-xl">
+                  <div className="flex items-center gap-2.5 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+                      <TrendingUp size={16} className="text-emerald-400" />
                     </div>
                     <div>
-                      <div className="text-white font-semibold text-sm leading-snug">
+                      <div className="text-white font-semibold text-xs sm:text-sm leading-snug">
                         Progreso real, semana a semana
                       </div>
-                      <div className="text-slate-500 text-xs mt-0.5">
+                      <div className="text-slate-500 text-[11px] sm:text-xs mt-0.5">
                         Con datos, no con suposiciones
                       </div>
                     </div>
