@@ -452,6 +452,8 @@ const PLANS = [
 
 const QUIEN_SOY_SLIDES = [
   { src: COACH_PROGRESS, alt: 'Coach de asesoramiento fitness'    },
+  { src: COACH_IMG2,     alt: 'Resultado de asesoría fitness'     },
+  { src: COACH_IMG3,     alt: 'Transformación física real'        },
   { src: COACH_IMG4,     alt: 'Proceso de entrenamiento real'     },
   { src: COACH_IMG6,     alt: 'Resultados reales del método'      },
   { src: COACH_IMG7,     alt: 'Evolución física del coach'         },
@@ -743,95 +745,35 @@ export default function Landing() {
 
           {/* Foto hero */}
           <div className="fade-up flex justify-center lg:justify-end" style={{ transitionDelay: '0.1s' }}>
-            {/*
-              Composición editorial:
-              - Mobile:   imagen principal full-width, secundarias como thumbnails horizontales debajo
-              - Desktop:  collage integrado — principal (2/3) + secundarias en columna (1/3)
-                          con fusión visual entre ambos bloques via gradient overlay
-            */}
-            <div className="flex flex-col lg:flex-row gap-3 lg:gap-2 w-full max-w-[380px] lg:max-w-none">
+            <div className="relative w-full max-w-[380px] sm:max-w-[420px] lg:max-w-[430px]">
 
-              {/* ── IMAGEN PRINCIPAL — protagonista absoluta ── */}
-              <div className="relative lg:flex-none lg:w-[65%]">
-                <div
-                  className="relative rounded-3xl overflow-hidden shadow-2xl"
-                  style={{ aspectRatio: '3/4', maxHeight: '520px' }}
-                >
-                  <img
-                    src={COACH_HERO}
-                    alt="Coach de asesoramiento fitness"
-                    className="w-full h-full object-cover object-top transition-transform duration-700 hover:scale-[1.02]"
-                  />
-                  {/* Degradado inferior */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/80 via-[#0a0a0f]/10 to-transparent" />
-                  {/*
-                    Fusión lateral derecha (solo desktop):
-                    El borde derecho de la imagen principal se disuelve hacia el fondo oscuro,
-                    creando continuidad visual con las imágenes secundarias
-                  */}
-                  <div className="hidden lg:block absolute inset-y-0 right-0 w-28
-                                  bg-gradient-to-r from-transparent to-[#0a0a0f]
-                                  pointer-events-none" />
-                </div>
+              {/* ── IMAGEN PRINCIPAL — hero limpio ── */}
+              <div className="relative h-[360px] sm:h-[400px] lg:h-[520px] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl">
+                <img
+                  src={COACH_HERO}
+                  alt="Coach de asesoramiento fitness"
+                  className="w-full h-full object-cover object-top transition-transform duration-700 hover:scale-[1.02]"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/80 via-[#0a0a0f]/10 to-transparent" />
+              </div>
 
-                {/* Floating card */}
-                <div className="absolute -bottom-5 -left-4 right-4 lg:right-auto lg:w-64">
-                  <div className="bg-[#111118]/95 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-4 shadow-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                        <TrendingUp size={18} className="text-emerald-400" />
+              {/* Floating card */}
+              <div className="absolute -bottom-5 -left-4 right-4 sm:right-auto sm:w-64">
+                <div className="bg-[#111118]/95 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-4 shadow-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+                      <TrendingUp size={18} className="text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="text-white font-semibold text-sm leading-snug">
+                        Progreso real, semana a semana
                       </div>
-                      <div>
-                        <div className="text-white font-semibold text-sm leading-snug">
-                          Progreso real, semana a semana
-                        </div>
-                        <div className="text-slate-500 text-xs mt-0.5">
-                          Con datos, no con suposiciones
-                        </div>
+                      <div className="text-slate-500 text-xs mt-0.5">
+                        Con datos, no con suposiciones
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* ── IMÁGENES SECUNDARIAS — apoyo visual ── */}
-              {/*
-                Relative container para el veil de fusión izquierda.
-                - Mobile:  flex-row, cada card con h-36 (thumbnail horizontal)
-                - Desktop: flex-col, cada card con flex-1 (se estiran para igualar la altura de la principal)
-              */}
-              <div className="relative flex flex-row lg:flex-col lg:flex-1 gap-2">
-
-                {/*
-                  Fusión lateral izquierda (solo desktop):
-                  El borde izquierdo de las secundarias emerge desde el fondo oscuro,
-                  completando la transición iniciada en la imagen principal.
-                  z-10 garantiza que cubra los bordes redondeados de las cards.
-                */}
-                <div className="hidden lg:block absolute inset-y-0 left-0 w-16
-                                bg-gradient-to-r from-[#0a0a0f] to-transparent
-                                z-10 pointer-events-none" />
-
-                {/* Secundaria 1 */}
-                <div className="relative flex-1 h-36 lg:h-auto lg:flex-1 rounded-2xl overflow-hidden shadow-lg">
-                  <img
-                    src={COACH_IMG2}
-                    alt="Resultado de asesoría fitness"
-                    className="w-full h-full object-cover object-top transition-transform duration-700 hover:scale-[1.02]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/60 to-transparent" />
-                </div>
-
-                {/* Secundaria 2 */}
-                <div className="relative flex-1 h-36 lg:h-auto lg:flex-1 rounded-2xl overflow-hidden shadow-lg">
-                  <img
-                    src={COACH_IMG3}
-                    alt="Transformación física real"
-                    className="w-full h-full object-cover object-top transition-transform duration-700 hover:scale-[1.02]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/60 to-transparent" />
-                </div>
-
               </div>
 
             </div>
