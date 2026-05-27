@@ -4,11 +4,30 @@ import { Zap, Eye, EyeOff, AlertCircle, Lock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { isSupabaseConfigured } from '../lib/supabaseClient'
 
+/**
+ * Convierte el usuario ingresado en un email interno de Supabase.
+ *
+ * Reglas:
+ *   - Si contiene '@' → se usa como email real (permite login del coach con su email)
+ *   - Si no contiene '@' → se convierte a {usuario}@asesorados.local
+ *
+ * Ejemplos:
+ *   'valentina'           → 'valentina@asesorados.local'
+ *   'VALENTINA'           → 'valentina@asesorados.local'  (normalizado a lowercase)
+ *   'coach@gmail.com'     → 'coach@gmail.com'             (email real intacto)
+ */
+function resolveEmail(username) {
+  const normalized = username.trim().toLowerCase()
+  return normalized.includes('@')
+    ? normalized
+    : `${normalized}@asesorados.local`
+}
+
 export default function Login() {
   const navigate = useNavigate()
   const { signIn, session, role } = useAuth()
 
-  const [email, setEmail]         = useState('')
+  const [username, setUsername]   = useState('')
   const [password, setPassword]   = useState('')
   const [showPass, setShowPass]   = useState(false)
   const [loading, setLoading]     = useState(false)
@@ -24,11 +43,12 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!email || !password) return
+    if (!username || !password) return
 
     setLoading(true)
     setError(null)
 
+    const email = resolveEmail(username)
     const { error: authError } = await signIn(email, password)
 
     if (authError) {
@@ -38,16 +58,15 @@ export default function Login() {
     }
 
     // signIn fue exitoso — esperar a que AuthContext cargue el rol
-    // El useEffect de arriba se dispara cuando role != null
     setWaiting(true)
     setLoading(false)
   }
 
   function resolveError(msg) {
-    if (msg?.includes('Invalid login credentials')) return 'Email o contraseña incorrectos'
-    if (msg?.includes('Email not confirmed'))        return 'Confirmá tu email antes de ingresar'
-    if (msg?.includes('no configurado'))             return 'Modo demo — Supabase no está configurado'
-    return msg || 'Ocurrió un error al iniciar sesión'
+    if (msg?.includes('Invalid login credentials')) return 'Usuario o contraseña incorrectos.'
+    if (msg?.includes('Email not confirmed'))        return 'La cuenta aún no fue confirmada. Contactá a tu coach.'
+    if (msg?.includes('no configurado'))             return 'Modo demo — Supabase no está configurado.'
+    return msg || 'Ocurrió un error al iniciar sesión.'
   }
 
   return (
@@ -56,12 +75,16 @@ export default function Login() {
 
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center">
+          <div className="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center shadow-glow">
             <Zap size={22} className="text-white" />
           </div>
           <div className="text-center">
-            <h1 className="text-white font-bold text-xl tracking-tight">Asesorados App</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Ingresá a tu seguimiento</p>
+            <h1 className="text-white font-bold text-xl tracking-tight">
+              Ingresar a mi seguimiento
+            </h1>
+            <p className="text-slate-500 text-sm mt-1 leading-relaxed">
+              Entrá con el usuario y contraseña que te compartió tu coach.
+            </p>
           </div>
         </div>
 
@@ -70,28 +93,35 @@ export default function Login() {
           <div className="flex items-start gap-3 p-4 bg-amber-500/8 border border-amber-500/20 rounded-xl mb-5">
             <Lock size={15} className="text-amber-400 shrink-0 mt-0.5" />
             <p className="text-amber-300 text-xs leading-relaxed">
-              <span className="font-semibold">Modo demo.</span> Supabase no está configurado — el login no funcionará hasta que agregues las variables de entorno.
+              <span className="font-semibold">Modo demo.</span>{' '}
+              Supabase no está configurado — el login no funcionará hasta que agregues las variables de entorno.
             </p>
           </div>
         )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+
+          {/* Campo usuario */}
           <div>
             <label className="text-slate-400 text-xs font-medium mb-1.5 block">
-              Email
+              Usuario
             </label>
             <input
-              type="email"
-              autoComplete="email"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
+              placeholder="tu-usuario"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
               className="w-full px-4 py-3 bg-[#111118] border border-white/[0.08] rounded-xl text-white text-sm placeholder-slate-600 focus:outline-none focus:border-accent/50 transition-colors"
             />
           </div>
 
+          {/* Campo contraseña */}
           <div>
             <label className="text-slate-400 text-xs font-medium mb-1.5 block">
               Contraseña
@@ -110,6 +140,7 @@ export default function Login() {
                 type="button"
                 onClick={() => setShowPass((v) => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               >
                 {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -124,10 +155,11 @@ export default function Login() {
             </div>
           )}
 
+          {/* Submit */}
           <button
             type="submit"
-            disabled={loading || waitingRole || !email || !password}
-            className="w-full py-3 bg-accent hover:bg-accent-dark text-white font-semibold text-sm rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={loading || waitingRole || !username || !password}
+            className="w-full py-3 bg-accent hover:bg-accent-dark text-white font-semibold text-sm rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-1"
           >
             {loading || waitingRole ? (
               <>
@@ -149,6 +181,7 @@ export default function Login() {
             ← Volver al inicio
           </button>
         </div>
+
       </div>
     </div>
   )

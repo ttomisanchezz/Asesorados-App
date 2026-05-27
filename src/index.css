@@ -55,4 +55,16 @@ body {
     border-color: rgba(108, 99, 255, 0.3);
     background: #1a1a24;
   }
+
+  /* ── Scroll reveal ── */
+  .fade-up {
+    opacity: 0;
+    transform: translateY(26px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    will-change: opacity, transform;
+  }
+  .fade-up.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

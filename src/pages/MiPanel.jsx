@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Utensils, Dumbbell, ClipboardCheck, TrendingUp, ArrowRight,
-  CheckCircle2, Clock, AlertCircle, MessageSquare, Calendar, Zap, ChevronRight
+  CheckCircle2, Clock, AlertCircle, MessageSquare, Calendar, Zap, ChevronRight, LogOut
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 import SectionCard from '../components/ui/SectionCard'
 import ProgressBar from '../components/ui/ProgressBar'
 import Badge from '../components/ui/Badge'
@@ -38,8 +39,14 @@ function QuickStat({ label, value, color = 'text-white', bg = 'bg-white/[0.03]' 
 
 export default function MiPanel() {
   const navigate = useNavigate()
+  const { signOut } = useAuth()
   const [client, setClient] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  async function handleSignOut() {
+    await signOut()
+    navigate('/', { replace: true })
+  }
 
   useEffect(() => {
     getMyClientProfile()
@@ -48,15 +55,30 @@ export default function MiPanel() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Header compartido — visible en loading, empty state y panel completo
+  const PanelHeader = () => (
+    <header className="sticky top-0 z-40 flex items-center justify-between px-5 py-4 bg-[#0a0a0f]/95 backdrop-blur-md border-b border-white/[0.06]">
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
+          <Zap size={14} className="text-white" />
+        </div>
+        <span className="text-white font-bold text-sm tracking-tight">Mi seguimiento</span>
+      </div>
+      <button
+        onClick={handleSignOut}
+        className="flex items-center gap-1.5 text-slate-500 hover:text-white text-xs transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
+        aria-label="Cerrar sesión"
+      >
+        <LogOut size={13} />
+        Salir
+      </button>
+    </header>
+  )
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0f]">
-        <header className="sticky top-0 z-40 flex items-center gap-2.5 px-5 py-4 bg-[#0a0a0f]/95 backdrop-blur-md border-b border-white/[0.06]">
-          <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
-            <Zap size={14} className="text-white" />
-          </div>
-          <span className="text-white font-bold text-sm tracking-tight">Mi seguimiento</span>
-        </header>
+        <PanelHeader />
         <PageLoader label="Cargando tu panel..." />
       </div>
     )
@@ -65,16 +87,11 @@ export default function MiPanel() {
   if (!client) {
     return (
       <div className="min-h-screen bg-[#0a0a0f]">
-        <header className="sticky top-0 z-40 flex items-center gap-2.5 px-5 py-4 bg-[#0a0a0f]/95 backdrop-blur-md border-b border-white/[0.06]">
-          <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
-            <Zap size={14} className="text-white" />
-          </div>
-          <span className="text-white font-bold text-sm tracking-tight">Mi seguimiento</span>
-        </header>
+        <PanelHeader />
         <EmptyState
           icon={Zap}
-          title="Tu perfil no está configurado"
-          description="Pedile a tu coach que active tu cuenta."
+          title="No encontramos tu seguimiento activo"
+          description="Tu cuenta ya está creada, pero todavía no tiene un plan asignado. Pedile a tu coach que revise la configuración."
         />
       </div>
     )
@@ -89,20 +106,7 @@ export default function MiPanel() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] pb-10">
       {/* Header */}
-      <header className="sticky top-0 z-40 flex items-center justify-between px-5 py-4 bg-[#0a0a0f]/95 backdrop-blur-md border-b border-white/[0.06]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
-            <Zap size={14} className="text-white" />
-          </div>
-          <span className="text-white font-bold text-sm tracking-tight">Mi seguimiento</span>
-        </div>
-        <button
-          className="text-slate-500 hover:text-white text-xs transition-colors"
-          onClick={() => navigate('/dashboard')}
-        >
-          Vista coach →
-        </button>
-      </header>
+      <PanelHeader />
 
       <div className="max-w-2xl mx-auto px-4 pt-6 flex flex-col gap-5">
 
