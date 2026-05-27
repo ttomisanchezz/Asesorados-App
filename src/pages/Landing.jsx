@@ -1,39 +1,49 @@
 import { useNavigate } from 'react-router-dom'
 import {
-  Zap, Users, Utensils, Dumbbell, ClipboardCheck, TrendingUp,
-  CheckCircle, ArrowRight, MessageSquare, FileSpreadsheet, FolderOpen,
-  Shield, BarChart2, Calendar
+  Zap, Utensils, Dumbbell, ClipboardCheck, TrendingUp,
+  ArrowRight, CheckCircle, Lock, MessageSquare, RefreshCw, Target
 } from 'lucide-react'
 import Button from '../components/ui/Button'
 
-const PROBLEMS = [
-  { icon: MessageSquare, text: 'Planes enviados por WhatsApp que se pierden entre mensajes' },
-  { icon: FileSpreadsheet, text: 'Hojas de Excel imposibles de mantener actualizadas' },
-  { icon: FolderOpen, text: 'PDFs, notas, fotos y datos dispersos sin conexión entre sí' },
-  { icon: Calendar, text: 'Revisiones manuales que consumen tiempo que no tenés' },
-]
-
-const FEATURES = [
-  { icon: Users, title: 'Gestión de asesorados', desc: 'Todos tus asesorados en un solo lugar. Estado, adherencia, progreso y notas internas.' },
-  { icon: Utensils, title: 'Planes nutricionales', desc: 'Calorías, macros y comidas del día. Historial de actualizaciones y adherencia real.' },
-  { icon: Dumbbell, title: 'Rutinas de entrenamiento', desc: 'Ejercicios, series, cargas y progresión. Vinculados directamente a cada asesorado.' },
-  { icon: ClipboardCheck, title: 'Check-ins semanales', desc: 'Seguimiento estructurado de peso, energía, sueño, estrés y adherencia al plan.' },
-  { icon: TrendingUp, title: 'Progreso visual', desc: 'Evolución de peso, medidas y adherencia en el tiempo. Sin hojas de cálculo.' },
-  { icon: Shield, title: 'Información centralizada', desc: 'Todo lo que sabés de cada asesorado en un mismo lugar. Seguro y organizado.' },
+const PANEL_SECTIONS = [
+  {
+    icon: Utensils,
+    title: 'Tu plan nutricional',
+    desc: 'Calorías objetivo, macros y detalle de cada comida del día. Siempre actualizado por tu coach.',
+  },
+  {
+    icon: Dumbbell,
+    title: 'Tu rutina de entrenamiento',
+    desc: 'Ejercicios, series, cargas y observaciones técnicas. Adaptada a tus días y objetivos.',
+  },
+  {
+    icon: ClipboardCheck,
+    title: 'Tus check-ins semanales',
+    desc: 'Cargá tu peso, energía, sueño y adherencia. Tu coach lo revisa y te da feedback.',
+  },
+  {
+    icon: TrendingUp,
+    title: 'Tu progreso',
+    desc: 'Evolución de peso, medidas y adherencia en el tiempo. Sin planillas, sin confusión.',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Indicaciones de tu coach',
+    desc: 'Correcciones, notas y próximos ajustes. Todo en un solo lugar, siempre disponible.',
+  },
+  {
+    icon: RefreshCw,
+    title: 'Ajustes del plan',
+    desc: 'Cuando tu coach actualice algo, lo ves de inmediato. Sin perder mensajes en WhatsApp.',
+  },
 ]
 
 const BENEFITS = [
-  'Ahorrás tiempo en tareas administrativas',
-  'Tomás mejores decisiones con datos reales',
-  'Tus asesorados perciben más profesionalismo',
-  'Seguimiento consistente sin depender de tu memoria',
-  'Preparado para escalar tu práctica',
-]
-
-const MOCK_STATS = [
-  { value: '5', label: 'Asesorados activos' },
-  { value: '92%', label: 'Adherencia promedio' },
-  { value: '4', label: 'Check-ins esta semana' },
+  'Accedés a tu plan en cualquier momento, desde el celular',
+  'No tenés que buscar PDFs ni mensajes de WhatsApp',
+  'Ves exactamente qué comer y cómo entrenar hoy',
+  'Tu coach puede dejarte indicaciones sin llamarte',
+  'Todo tu historial de progreso en un solo lugar',
 ]
 
 export default function Landing() {
@@ -42,7 +52,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
       {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-white/[0.05] max-w-6xl mx-auto">
+      <nav className="flex items-center justify-between px-6 py-4 border-b border-white/[0.05] max-w-5xl mx-auto">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center">
             <Zap size={16} className="text-white" />
@@ -50,83 +60,68 @@ export default function Landing() {
           <span className="text-white font-bold tracking-tight">Asesorados</span>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-            Acceder
+          <Button variant="ghost" size="sm" onClick={() => navigate('/mi-panel')}>
+            Ingresar
           </Button>
-          <Button size="sm" onClick={() => navigate('/dashboard')}>
-            Probar ahora
+          <Button size="sm" onClick={() => navigate('/mi-panel')}>
+            Mi seguimiento
           </Button>
         </div>
       </nav>
 
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 pt-20 pb-16 text-center">
+      <section className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-sm font-medium mb-8">
-          <Zap size={14} /> Beta disponible para coaches
+          <Lock size={13} /> Panel privado para asesorados
         </div>
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight tracking-tight mb-6">
-          Gestioná tus asesorados
+          Tu seguimiento,
           <br />
-          <span className="text-gradient">sin el caos</span>
+          <span className="text-gradient">claro y ordenado</span>
         </h1>
-        <p className="text-slate-400 text-lg max-w-2xl mx-auto mb-10 leading-relaxed">
-          La plataforma de un coach fitness/nutrición profesional. Centraliza asesorados, planes, rutinas, check-ins y progreso en un solo lugar.
+        <p className="text-slate-400 text-lg max-w-xl mx-auto mb-10 leading-relaxed">
+          Accedé a tu plan nutricional, rutina, check-ins, progreso y correcciones desde un solo lugar.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
-          <Button size="lg" iconRight={ArrowRight} onClick={() => navigate('/dashboard')}>
-            Ver el dashboard
+          <Button size="lg" iconRight={ArrowRight} onClick={() => navigate('/mi-panel')}>
+            Ingresar a mi seguimiento
           </Button>
-          <Button variant="secondary" size="lg" onClick={() => navigate('/clients')}>
-            Ver asesorados
+          <Button variant="secondary" size="lg" onClick={() => navigate('/mi-panel')}>
+            Ver mi plan
           </Button>
         </div>
 
-        {/* Stats bar */}
-        <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
-          {MOCK_STATS.map((s) => (
+        {/* Preview stats */}
+        <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
+          {[
+            { value: 'Plan', label: 'nutricional actualizado' },
+            { value: 'Rutina', label: 'personalizada activa' },
+            { value: '100%', label: 'privado y seguro' },
+          ].map((s) => (
             <div key={s.label} className="bg-[#111118] border border-white/[0.06] rounded-xl py-4 px-3">
-              <div className="text-2xl font-bold text-accent mb-0.5">{s.value}</div>
-              <div className="text-slate-500 text-xs">{s.label}</div>
+              <div className="text-base font-bold text-accent mb-0.5">{s.value}</div>
+              <div className="text-slate-500 text-xs leading-snug">{s.label}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Problem */}
-      <section className="max-w-6xl mx-auto px-6 py-16 border-t border-white/[0.05]">
+      {/* What you'll find */}
+      <section className="max-w-5xl mx-auto px-6 py-16 border-t border-white/[0.05]">
         <div className="max-w-2xl mx-auto text-center mb-12">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
-            ¿Cómo gestionás tus asesorados hoy?
+            Todo lo que necesitás en un solo lugar
           </h2>
-          <p className="text-slate-400">
-            La mayoría de los coaches manejan su práctica con herramientas que no fueron diseñadas para esto.
-          </p>
-        </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {PROBLEMS.map(({ icon: Icon, text }) => (
-            <div key={text} className="bg-[#111118] border border-rose-500/10 rounded-2xl p-5 flex flex-col gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
-                <Icon size={20} className="text-rose-400" />
-              </div>
-              <p className="text-slate-300 text-sm leading-relaxed">{text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="max-w-6xl mx-auto px-6 py-16 border-t border-white/[0.05]">
-        <div className="max-w-2xl mx-auto text-center mb-12">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
-            Todo lo que necesitás, en un solo lugar
-          </h2>
-          <p className="text-slate-400">
-            Construido específicamente para coaches de fitness y nutrición que quieren trabajar de forma profesional.
+          <p className="text-slate-400 text-base">
+            Tu panel personal tiene todo lo que tu coach preparó para vos.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {FEATURES.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="bg-[#111118] border border-white/[0.06] rounded-2xl p-5 hover:border-accent/25 transition-colors group">
+          {PANEL_SECTIONS.map(({ icon: Icon, title, desc }) => (
+            <div
+              key={title}
+              className="bg-[#111118] border border-white/[0.06] rounded-2xl p-5 hover:border-accent/25 transition-colors group"
+            >
               <div className="w-11 h-11 rounded-xl bg-accent/10 flex items-center justify-center mb-4 group-hover:bg-accent/20 transition-colors">
                 <Icon size={22} className="text-accent" />
               </div>
@@ -138,81 +133,81 @@ export default function Landing() {
       </section>
 
       {/* Benefits */}
-      <section className="max-w-6xl mx-auto px-6 py-16 border-t border-white/[0.05]">
+      <section className="max-w-5xl mx-auto px-6 py-16 border-t border-white/[0.05]">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6">
-              Trabajá como el coach que querés ser
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+              Todo tu seguimiento, siempre disponible
             </h2>
+            <p className="text-slate-400 text-sm leading-relaxed mb-6">
+              Ya no tenés que buscar el PDF en el mail, el PDF que mandó tu coach por WhatsApp, o la planilla que no encontrás. Todo está acá.
+            </p>
             <div className="flex flex-col gap-3">
               {BENEFITS.map((b) => (
                 <div key={b} className="flex items-start gap-3">
-                  <CheckCircle size={18} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <CheckCircle size={17} className="text-emerald-400 shrink-0 mt-0.5" />
                   <span className="text-slate-300 text-sm">{b}</span>
                 </div>
               ))}
             </div>
           </div>
-          <div className="bg-[#111118] border border-white/[0.06] rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                <BarChart2 size={20} className="text-accent" />
+
+          {/* Mini preview card */}
+          <div className="bg-[#111118] border border-white/[0.06] rounded-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3 pb-4 border-b border-white/[0.05]">
+              <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent font-bold text-sm">
+                VM
               </div>
               <div>
-                <div className="text-white font-semibold text-sm">Dashboard del coach</div>
-                <div className="text-slate-500 text-xs">Vista semanal</div>
+                <div className="text-white font-semibold text-sm">Valentina Morales</div>
+                <div className="text-slate-500 text-xs">Pérdida de grasa · Semana 15</div>
+              </div>
+              <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-emerald-400 text-xs font-medium">Activa</span>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'Adherencia nutricional prom.', value: 82, color: 'accent' },
-                { label: 'Adherencia entrenamiento prom.', value: 90, color: 'emerald' },
-              ].map((item) => (
-                <div key={item.label}>
-                  <div className="flex items-center justify-between mb-1.5 text-xs">
-                    <span className="text-slate-400">{item.label}</span>
-                    <span className={item.color === 'emerald' ? 'text-emerald-400 font-semibold' : 'text-accent font-semibold'}>{item.value}%</span>
-                  </div>
-                  <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${item.color === 'emerald' ? 'bg-emerald-500' : 'bg-accent'}`}
-                      style={{ width: `${item.value}%` }}
-                    />
-                  </div>
+                { label: 'Calorías hoy', value: '1.750 kcal', color: 'text-accent' },
+                { label: 'Adherencia nut.', value: '88%', color: 'text-emerald-400' },
+                { label: 'Próximo check-in', value: 'Lunes', color: 'text-white' },
+                { label: 'Adherencia ent.', value: '92%', color: 'text-emerald-400' },
+              ].map((s) => (
+                <div key={s.label} className="bg-white/[0.03] rounded-xl p-3">
+                  <div className="text-slate-500 text-xs mb-0.5">{s.label}</div>
+                  <div className={`font-bold text-sm ${s.color}`}>{s.value}</div>
                 </div>
               ))}
-              <div className="grid grid-cols-3 gap-2 mt-2">
-                {[
-                  { v: '4', l: 'Check-ins' },
-                  { v: '2', l: 'Ajustes' },
-                  { v: '1', l: 'Pausados' },
-                ].map((s) => (
-                  <div key={s.l} className="bg-white/[0.03] rounded-xl p-2.5 text-center">
-                    <div className="text-white font-bold text-lg">{s.v}</div>
-                    <div className="text-slate-600 text-xs">{s.l}</div>
-                  </div>
-                ))}
-              </div>
+            </div>
+            <div className="p-3 bg-accent/5 border border-accent/15 rounded-xl">
+              <div className="text-accent text-xs font-semibold mb-0.5">Nota de tu coach</div>
+              <p className="text-slate-300 text-xs leading-relaxed">
+                "Excelente semana. La adherencia sigue alta. Bajamos 50 kcal la próxima semana."
+              </p>
             </div>
           </div>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="max-w-6xl mx-auto px-6 py-16 border-t border-white/[0.05]">
+      <section className="max-w-5xl mx-auto px-6 py-16 border-t border-white/[0.05]">
         <div className="bg-gradient-to-br from-accent/15 via-accent/8 to-transparent border border-accent/20 rounded-3xl p-10 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
-            Listo para empezar
+          <div className="w-14 h-14 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-5">
+            <Target size={26} className="text-accent" />
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
+            Tu evolución, organizada
           </h2>
-          <p className="text-slate-400 mb-8 max-w-md mx-auto">
-            Explorá el dashboard y todas las secciones. Actualmente en beta con datos de muestra.
+          <p className="text-slate-400 mb-8 max-w-md mx-auto text-sm leading-relaxed">
+            Ingresá a tu panel y revisá todo lo que tu coach preparó para esta semana.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" iconRight={ArrowRight} onClick={() => navigate('/dashboard')}>
-              Abrir el dashboard
+            <Button size="lg" iconRight={ArrowRight} onClick={() => navigate('/mi-panel')}>
+              Ingresar a mi seguimiento
             </Button>
-            <Button variant="secondary" size="lg" onClick={() => navigate('/clients')}>
-              Ver asesorados
+            <Button variant="secondary" size="lg" onClick={() => navigate('/dashboard')}>
+              Vista del coach
             </Button>
           </div>
         </div>
@@ -226,7 +221,7 @@ export default function Landing() {
           </div>
           <span className="text-white font-semibold text-sm">Asesorados App</span>
         </div>
-        <p className="text-slate-600 text-xs">Beta v0.1.0 · Construido para coaches que buscan crecer</p>
+        <p className="text-slate-600 text-xs">Tu panel privado de seguimiento fitness y nutrición</p>
       </footer>
     </div>
   )

@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom'
 import Landing from '../pages/Landing'
+import MiPanel from '../pages/MiPanel'
 import Dashboard from '../pages/Dashboard'
 import Clients from '../pages/Clients'
 import ClientDetail from '../pages/ClientDetail'
@@ -11,6 +12,7 @@ import Settings from '../pages/Settings'
 
 export const router = createBrowserRouter([
   { path: '/', element: <Landing /> },
+  { path: '/mi-panel', element: <MiPanel /> },
   { path: '/dashboard', element: <Dashboard /> },
   { path: '/clients', element: <Clients /> },
   { path: '/clients/:id', element: <ClientDetail /> },

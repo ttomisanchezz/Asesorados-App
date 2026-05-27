@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Settings,
   Zap,
+  UserCircle2,
 } from 'lucide-react'
 
 const navItems = [
@@ -57,6 +58,21 @@ export default function Sidebar() {
 
       {/* Bottom */}
       <div className="px-3 pb-4 border-t border-white/[0.06] pt-4">
+        {/* Vista asesorado */}
+        <NavLink
+          to="/mi-panel"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-1 ${
+              isActive
+                ? 'bg-accent/15 text-accent border border-accent/20'
+                : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] border border-dashed border-white/[0.06]'
+            }`
+          }
+        >
+          <UserCircle2 size={18} />
+          <span className="flex-1">Vista asesorado</span>
+        </NavLink>
+
         <NavLink
           to="/settings"
           className={({ isActive }) =>
