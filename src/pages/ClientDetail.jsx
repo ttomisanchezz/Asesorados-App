@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, User, Target, Dumbbell, Utensils, TrendingUp,
@@ -9,7 +9,8 @@ import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import SectionCard from '../components/ui/SectionCard'
 import ProgressBar from '../components/ui/ProgressBar'
-import { getClientById } from '../data/mockClients'
+import { PageLoader } from '../components/ui/LoadingSpinner'
+import { getClientById } from '../services/clientService'
 
 const TABS = [
   { id: 'summary', label: 'Resumen', icon: User },
@@ -35,10 +36,32 @@ function RatingDots({ value, max = 5 }) {
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const client = getClientById(id)
+  const [client, setClient]     = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [notFound, setNotFound] = useState(false)
   const [activeTab, setActiveTab] = useState('summary')
 
-  if (!client) {
+  useEffect(() => {
+    if (!id) return
+    setLoading(true)
+    getClientById(id)
+      .then(({ data, error }) => {
+        if (error || !data) setNotFound(true)
+        else setClient(data)
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  if (loading) {
+    return (
+      <Layout>
+        <PageLoader label="Cargando asesorado..." />
+      </Layout>
+    )
+  }
+
+  if (notFound || !client) {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center py-20 gap-4">

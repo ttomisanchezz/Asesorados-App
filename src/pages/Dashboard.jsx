@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, ClipboardCheck, AlertTriangle, TrendingUp, Clock, ArrowRight, CheckCircle2, Circle, RefreshCw } from 'lucide-react'
 import Layout from '../components/layout/Layout'
@@ -6,8 +7,10 @@ import SectionCard from '../components/ui/SectionCard'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import ProgressBar from '../components/ui/ProgressBar'
-import { dashboardStats, upcomingTasks, weekSummary, recentActivity } from '../data/mockDashboard'
+import { upcomingTasks, recentActivity } from '../data/mockDashboard'
 import { mockClients } from '../data/mockClients'
+import { getClients } from '../services/clientService'
+import { useAuth } from '../context/AuthContext'
 
 const priorityConfig = {
   high: { dot: 'bg-rose-500', text: 'text-rose-400' },
@@ -23,10 +26,28 @@ const activityIcons = {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const [clients, setClients] = useState(null)  // null = loading
 
-  const lowAdherenceClients = mockClients.filter(
-    (c) => c.status === 'active' && (c.adherenceNutrition < 75 || c.adherenceTraining < 75)
+  useEffect(() => {
+    getClients()
+      .then(({ data }) => setClients(data ?? []))
+      .catch(() => setClients(mockClients))  // fallback silencioso
+  }, [])
+
+  // Mientras carga, usar mocks para mostrar algo de inmediato
+  const displayClients = clients ?? mockClients
+
+  const activeClients       = displayClients.filter((c) => c.status === 'active')
+  const lowAdherenceClients = activeClients.filter(
+    (c) => (c.adherenceNutrition < 75 || c.adherenceTraining < 75)
   )
+  const avgNutrition  = activeClients.length
+    ? Math.round(activeClients.reduce((s, c) => s + (c.adherenceNutrition ?? 0), 0) / activeClients.length)
+    : 0
+  const avgTraining   = activeClients.length
+    ? Math.round(activeClients.reduce((s, c) => s + (c.adherenceTraining ?? 0), 0) / activeClients.length)
+    : 0
 
   return (
     <Layout>
@@ -44,28 +65,28 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard
           label="Asesorados activos"
-          value={dashboardStats.activeClients}
-          sub={`${dashboardStats.totalClients} total`}
+          value={clients === null ? '—' : activeClients.length}
+          sub={clients === null ? 'Cargando...' : `${displayClients.length} total`}
           icon={Users}
           iconColor="text-accent"
         />
         <StatCard
-          label="Check-ins esta semana"
-          value={dashboardStats.checkinsThisWeek}
-          sub="de 4 esperados"
-          icon={ClipboardCheck}
+          label="Adherencia nutricional"
+          value={clients === null ? '—' : `${avgNutrition}%`}
+          sub="promedio activos"
+          icon={TrendingUp}
           iconColor="text-emerald-400"
         />
         <StatCard
-          label="Check-ins pendientes"
-          value={dashboardStats.pendingCheckins}
-          sub="requieren atención"
-          icon={Clock}
-          iconColor="text-amber-400"
+          label="Adherencia entrenamiento"
+          value={clients === null ? '—' : `${avgTraining}%`}
+          sub="promedio activos"
+          icon={ClipboardCheck}
+          iconColor="text-sky-400"
         />
         <StatCard
           label="Baja adherencia"
-          value={lowAdherenceClients.length}
+          value={clients === null ? '—' : lowAdherenceClients.length}
           sub="asesorado/s"
           icon={AlertTriangle}
           iconColor="text-rose-400"
@@ -175,32 +196,30 @@ export default function Dashboard() {
         {/* Right col */}
         <div className="flex flex-col gap-4">
           {/* Week summary */}
-          <SectionCard title="Resumen semanal" subtitle="Semana 21">
+          <SectionCard title="Resumen semanal">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3">
-                <ProgressBar label="Adherencia nutricional prom." value={weekSummary.avgAdherenceNutrition} color="accent" />
-                <ProgressBar label="Adherencia entrenamiento prom." value={weekSummary.avgAdherenceTraining} color="emerald" />
+                <ProgressBar label="Adherencia nutricional prom." value={avgNutrition} color="accent" />
+                <ProgressBar label="Adherencia entrenamiento prom." value={avgTraining} color="emerald" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-white/[0.03] rounded-xl p-3 text-center">
-                  <div className="text-2xl font-bold text-white">{weekSummary.checkinsCompleted}</div>
-                  <div className="text-slate-500 text-xs mt-1">Check-ins</div>
+                  <div className="text-2xl font-bold text-white">{activeClients.length}</div>
+                  <div className="text-slate-500 text-xs mt-1">Activos</div>
                 </div>
                 <div className="bg-white/[0.03] rounded-xl p-3 text-center">
-                  <div className="text-2xl font-bold text-white">{weekSummary.adjustmentsMade}</div>
-                  <div className="text-slate-500 text-xs mt-1">Ajustes</div>
+                  <div className="text-2xl font-bold text-white">{lowAdherenceClients.length}</div>
+                  <div className="text-slate-500 text-xs mt-1">Baja adh.</div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Mejor adherencia</span>
-                  <span className="text-emerald-400 font-semibold">{weekSummary.bestClient}</span>
-                </div>
+              {lowAdherenceClients.length > 0 && (
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-500">Necesita atención</span>
-                  <span className="text-amber-400 font-semibold">{weekSummary.needsAttention}</span>
+                  <span className="text-amber-400 font-semibold truncate ml-2">
+                    {lowAdherenceClients[0]?.name?.split(' ')[0]}
+                  </span>
                 </div>
-              </div>
+              )}
             </div>
           </SectionCard>
 
@@ -229,7 +248,7 @@ export default function Dashboard() {
             }
           >
             <div className="flex flex-col gap-2">
-              {mockClients.filter((c) => c.status === 'active').map((c) => (
+              {displayClients.filter((c) => c.status === 'active').map((c) => (
                 <div
                   key={c.id}
                   className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.03] transition-colors cursor-pointer"

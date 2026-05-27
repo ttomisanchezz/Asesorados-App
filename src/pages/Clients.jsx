@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, UserPlus, Users } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import PageHeader from '../components/ui/PageHeader'
 import ClientCard from '../components/ui/ClientCard'
 import Button from '../components/ui/Button'
 import EmptyState from '../components/ui/EmptyState'
-import { mockClients } from '../data/mockClients'
+import { PageLoader } from '../components/ui/LoadingSpinner'
+import { getClients } from '../services/clientService'
 
 const FILTERS = [
   { label: 'Todos', value: 'all' },
@@ -15,12 +16,25 @@ const FILTERS = [
 ]
 
 export default function Clients() {
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch]   = useState('')
+  const [filter, setFilter]   = useState('all')
 
-  const filtered = mockClients.filter((c) => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.objective.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    getClients()
+      .then(({ data }) => setClients(data ?? []))
+      .catch(() => setClients([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const activeCount = clients.filter((c) => c.status === 'active').length
+
+  const filtered = clients.filter((c) => {
+    const term = search.toLowerCase()
+    const matchSearch =
+      (c.name ?? '').toLowerCase().includes(term) ||
+      (c.objective ?? '').toLowerCase().includes(term)
     const matchFilter = filter === 'all' || c.status === filter
     return matchSearch && matchFilter
   })
@@ -29,7 +43,7 @@ export default function Clients() {
     <Layout>
       <PageHeader
         title="Asesorados"
-        subtitle={`${mockClients.filter((c) => c.status === 'active').length} activos · ${mockClients.length} total`}
+        subtitle={loading ? 'Cargando...' : `${activeCount} activos · ${clients.length} total`}
       >
         <Button icon={UserPlus} size="sm">
           Agregar asesorado
@@ -65,12 +79,18 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
+      {/* States */}
+      {loading ? (
+        <PageLoader label="Cargando asesorados..." />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No se encontraron asesorados"
-          description="Intentá con otro término o cambiá el filtro."
+          title={clients.length === 0 ? 'No hay asesorados todavía' : 'No se encontraron asesorados'}
+          description={
+            clients.length === 0
+              ? 'Agregá tu primer asesorado para empezar.'
+              : 'Intentá con otro término o cambiá el filtro.'
+          }
         />
       ) : (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">

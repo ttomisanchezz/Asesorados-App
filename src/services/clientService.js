@@ -1,6 +1,51 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { mockClients } from '../data/mockClients'
 
+// ---------------------------------------------------------------------------
+// Normalización: convierte snake_case de Supabase al formato camelCase del UI.
+// Los mocks ya vienen en el formato correcto, por eso este step solo aplica
+// a datos reales de Supabase.
+// ---------------------------------------------------------------------------
+function normalizeClient(raw) {
+  if (!raw) return null
+  // Si ya tiene 'name' (mock) lo dejamos pasar intacto
+  if (raw.name !== undefined) return raw
+
+  return {
+    id:                  raw.id,
+    name:                raw.full_name ?? '',
+    avatar:              raw.avatar_initials
+                           ?? raw.full_name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+                           ?? '??',
+    avatarColor:         raw.avatar_color ?? '#6c63ff',
+    age:                 raw.age,
+    gender:              raw.gender ?? '',
+    email:               raw.email ?? '',
+    phone:               raw.phone ?? '',
+    objective:           raw.objective ?? '',
+    status:              raw.status ?? 'active',
+    weight:              raw.weight,
+    targetWeight:        raw.target_weight,
+    height:              raw.height,
+    experience:          raw.experience ?? '',
+    availableDays:       raw.available_days ?? [],
+    limitations:         raw.limitations ?? '',
+    internalNotes:       raw.internal_notes ?? '',
+    adherenceNutrition:  raw.adherence_nutrition ?? 0,
+    adherenceTraining:   raw.adherence_training ?? 0,
+    lastCheckin:         raw.last_checkin ?? null,
+    nextReview:          raw.next_review ?? null,
+    weeklyGoal:          raw.weekly_goal ?? '',
+    startDate:           raw.created_at?.slice(0, 10) ?? '',
+    // Relaciones — se cargan por separado si es necesario
+    nutrition:           null,
+    training:            null,
+    progress:            null,
+  }
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * Retorna la lista de clientes del coach autenticado.
  * Fallback: mock data cuando Supabase no está configurado.
@@ -15,7 +60,11 @@ export async function getClients() {
     .select('*')
     .order('full_name', { ascending: true })
 
-  return { data, error, source: 'supabase' }
+  return {
+    data: error ? null : (data ?? []).map(normalizeClient),
+    error,
+    source: 'supabase',
+  }
 }
 
 /**
@@ -37,7 +86,11 @@ export async function getClientById(id) {
     .eq('id', id)
     .single()
 
-  return { data, error, source: 'supabase' }
+  return {
+    data: error ? null : normalizeClient(data),
+    error,
+    source: 'supabase',
+  }
 }
 
 /**
@@ -46,7 +99,6 @@ export async function getClientById(id) {
  */
 export async function getMyClientProfile() {
   if (!isSupabaseConfigured) {
-    // Demo: retorna el primer asesorado activo
     const client = mockClients.find((c) => c.status === 'active')
     return { data: client ?? null, error: null, source: 'mock' }
   }
@@ -60,7 +112,11 @@ export async function getMyClientProfile() {
     .eq('user_id', user.id)
     .single()
 
-  return { data, error, source: 'supabase' }
+  return {
+    data: error ? null : normalizeClient(data),
+    error,
+    source: 'supabase',
+  }
 }
 
 /**

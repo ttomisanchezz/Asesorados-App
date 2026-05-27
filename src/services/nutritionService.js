@@ -1,6 +1,21 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { mockClients } from '../data/mockClients'
 
+// Convierte el row de Supabase al formato que usa el UI
+function normalizeNutritionPlan(raw) {
+  if (!raw) return null
+  if (raw.lastUpdate !== undefined) return raw // ya normalizado (mock)
+  return {
+    calories:   raw.calories,
+    protein:    raw.protein,
+    carbs:      raw.carbs,
+    fat:        raw.fats,          // Supabase: fats → UI: fat
+    meals:      raw.meals ?? [],
+    notes:      raw.notes ?? '',
+    lastUpdate: raw.updated_at?.slice(0, 10) ?? '',
+  }
+}
+
 /**
  * Retorna el plan nutricional activo de un cliente.
  */
@@ -23,7 +38,7 @@ export async function getNutritionPlan(clientId) {
     .limit(1)
     .single()
 
-  return { data, error, source: 'supabase' }
+  return { data: error ? null : normalizeNutritionPlan(data), error, source: 'supabase' }
 }
 
 /**
@@ -58,7 +73,7 @@ export async function getMyNutritionPlan() {
     .limit(1)
     .single()
 
-  return { data, error, source: 'supabase' }
+  return { data: error ? null : normalizeNutritionPlan(data), error, source: 'supabase' }
 }
 
 /**

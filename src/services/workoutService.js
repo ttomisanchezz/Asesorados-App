@@ -1,6 +1,17 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { mockClients } from '../data/mockClients'
 
+function normalizeWorkoutPlan(raw) {
+  if (!raw) return null
+  if (raw.plan !== undefined) return raw // ya normalizado (mock)
+  return {
+    plan:      raw.title ?? '',
+    days:      raw.days ?? [],
+    exercises: raw.exercises ?? [],
+    notes:     raw.notes ?? '',
+  }
+}
+
 /**
  * Retorna la rutina activa de un cliente.
  */
@@ -19,7 +30,7 @@ export async function getWorkoutPlan(clientId) {
     .limit(1)
     .single()
 
-  return { data, error, source: 'supabase' }
+  return { data: error ? null : normalizeWorkoutPlan(data), error, source: 'supabase' }
 }
 
 /**
@@ -51,7 +62,7 @@ export async function getMyWorkoutPlan() {
     .limit(1)
     .single()
 
-  return { data, error, source: 'supabase' }
+  return { data: error ? null : normalizeWorkoutPlan(data), error, source: 'supabase' }
 }
 
 /**

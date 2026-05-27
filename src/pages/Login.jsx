@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Zap, Eye, EyeOff, AlertCircle, Lock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -6,13 +6,21 @@ import { isSupabaseConfigured } from '../lib/supabaseClient'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { signIn, role } = useAuth()
+  const { signIn, session, role } = useAuth()
 
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState(null)
+  const [email, setEmail]         = useState('')
+  const [password, setPassword]   = useState('')
+  const [showPass, setShowPass]   = useState(false)
+  const [loading, setLoading]     = useState(false)
+  const [waitingRole, setWaiting] = useState(false)
+  const [error, setError]         = useState(null)
+
+  // Redirect cuando sesión + rol están disponibles (llegan async desde AuthContext)
+  useEffect(() => {
+    if (session && role && waitingRole) {
+      navigate(role === 'coach' ? '/dashboard' : '/mi-panel', { replace: true })
+    }
+  }, [session, role, waitingRole, navigate])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -21,7 +29,7 @@ export default function Login() {
     setLoading(true)
     setError(null)
 
-    const { error: authError, data } = await signIn(email, password)
+    const { error: authError } = await signIn(email, password)
 
     if (authError) {
       setError(resolveError(authError.message))
@@ -29,16 +37,10 @@ export default function Login() {
       return
     }
 
-    // Redirigir según rol
-    // El rol se carga async desde AuthContext; esperamos un tick
-    setTimeout(() => {
-      const savedRole = data?.user?.app_metadata?.role
-      if (savedRole === 'coach') {
-        navigate('/dashboard', { replace: true })
-      } else {
-        navigate('/mi-panel', { replace: true })
-      }
-    }, 200)
+    // signIn fue exitoso — esperar a que AuthContext cargue el rol
+    // El useEffect de arriba se dispara cuando role != null
+    setWaiting(true)
+    setLoading(false)
   }
 
   function resolveError(msg) {
@@ -124,13 +126,13 @@ export default function Login() {
 
           <button
             type="submit"
-            disabled={loading || !email || !password}
+            disabled={loading || waitingRole || !email || !password}
             className="w-full py-3 bg-accent hover:bg-accent-dark text-white font-semibold text-sm rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? (
+            {loading || waitingRole ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Ingresando...
+                {waitingRole ? 'Redirigiendo...' : 'Ingresando...'}
               </>
             ) : (
               'Ingresar'
