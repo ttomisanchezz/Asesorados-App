@@ -665,7 +665,7 @@ export default function Landing() {
           scrolled
             ? 'border-white/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.5)]'
             : 'border-white/[0.05] shadow-none'
-        }`}
+        } overflow-x-hidden`}
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4 min-w-0">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
@@ -708,23 +708,23 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 lg:pt-14 pb-16 sm:pb-20 lg:pb-24">
-        <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-12 lg:pt-14 pb-14 sm:pb-20 lg:pb-24">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
 
           {/* Copy */}
-          <div className="fade-up">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[11px] sm:text-xs font-semibold mb-5 sm:mb-7">
+          <div className="fade-up order-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[11px] sm:text-xs font-semibold mb-4 sm:mb-7">
               <Star size={11} fill="currentColor" />
               Asesoramiento Fitness Personalizado
             </div>
-            <h1 className="text-[2.35rem] sm:text-5xl font-bold text-white leading-[1.05] sm:leading-tight tracking-tight mb-5 sm:mb-6">
+            <h1 className="text-[2.15rem] sm:text-5xl font-bold text-white leading-[1.06] sm:leading-tight tracking-tight mb-4 sm:mb-6">
               Transformá tu físico con un plan claro, seguimiento semanal y{' '}
               <span className="text-gradient">ajustes reales</span>
             </h1>
-            <p className="text-slate-400 text-base sm:text-lg leading-relaxed mb-7 sm:mb-9">
+            <p className="text-slate-400 text-[15px] sm:text-lg leading-relaxed mb-6 sm:mb-9">
               Entrenamiento personalizado, alimentación flexible y correcciones técnicas para que avances con método, datos y acompañamiento real.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 mb-5 sm:mb-7">
+            <div className="flex flex-col sm:flex-row gap-3 mb-4 sm:mb-7">
               <Button
                 size="lg"
                 iconRight={ArrowRight}
@@ -748,11 +748,11 @@ export default function Landing() {
           </div>
 
           {/* Foto hero */}
-          <div className="fade-up flex justify-center lg:justify-end" style={{ transitionDelay: '0.1s' }}>
-            <div className="relative w-full max-w-full sm:max-w-[420px] lg:max-w-[430px]">
+          <div className="fade-up order-2 flex justify-center lg:justify-end" style={{ transitionDelay: '0.1s' }}>
+            <div className="relative w-full max-w-[340px] sm:max-w-[360px] lg:max-w-[430px] mx-auto lg:mx-0">
 
               {/* ── IMAGEN PRINCIPAL — hero limpio ── */}
-              <div className="relative h-[380px] sm:h-[420px] lg:h-[520px] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl">
+              <div className="relative h-[300px] sm:h-[340px] lg:h-[520px] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl">
                 <img
                   src={COACH_HERO}
                   alt="Coach de asesoramiento fitness"
@@ -762,14 +762,14 @@ export default function Landing() {
               </div>
 
               {/* Floating card */}
-              <div className="absolute -bottom-4 left-1/2 w-[88%] -translate-x-1/2 sm:-left-4 sm:right-auto sm:w-64 sm:translate-x-0">
-                <div className="bg-[#111118]/95 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-3 sm:p-4 shadow-xl">
-                  <div className="flex items-center gap-2.5 sm:gap-3">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                      <TrendingUp size={16} className="text-emerald-400" />
+              <div className="absolute -bottom-3 left-1/2 w-[85%] max-w-[290px] -translate-x-1/2 sm:-left-4 sm:right-auto sm:w-64 sm:max-w-none sm:translate-x-0">
+                <div className="bg-[#111118]/95 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-2.5 sm:p-4 shadow-xl">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+                      <TrendingUp size={14} className="text-emerald-400 sm:w-[18px] sm:h-[18px]" />
                     </div>
                     <div>
-                      <div className="text-white font-semibold text-xs sm:text-sm leading-snug">
+                      <div className="text-white font-semibold text-[13px] sm:text-sm leading-snug">
                         Progreso real, semana a semana
                       </div>
                       <div className="text-slate-500 text-[11px] sm:text-xs mt-0.5">
