@@ -39,7 +39,7 @@ body {
 
 @layer utilities {
   .text-gradient {
-    background: linear-gradient(135deg, #6c63ff 0%, #a78bfa 100%);
+    background: linear-gradient(130deg, #a78bfa 0%, #c4b5fd 45%, #818cf8 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -67,4 +67,30 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+
+  /* ── Ken Burns — zoom + pan lento sobre el fondo del hero ── */
+  .ken-burns {
+    animation: kenBurns 24s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+}
+
+@keyframes kenBurns {
+  0%   { transform: scale(1)    translate(0, 0); }
+  100% { transform: scale(1.07) translate(-2%, -1%); }
+}
+
+/* ── Float image — movimiento suave tipo breathing ── */
+.float-image {
+  animation: floatImage 6s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-image { animation: none; }
+}
+
+@keyframes floatImage {
+  0%   { transform: translateY(0px)   scale(1);     }
+  100% { transform: translateY(-10px) scale(1.015); }
 }

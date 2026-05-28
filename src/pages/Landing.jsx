@@ -11,7 +11,6 @@ const WHATSAPP_PHONE = '5492984409447'
 const WHATSAPP_MESSAGE = 'Hola Tomi, quiero empezar mi asesoría fitness. Me interesa recibir más información sobre los planes.'
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`
 
-const COACH_HERO     = '/landing/coach-hero.jpg'
 const COACH_PROGRESS = '/landing/coach-progress.jpg'
 const COACH_IMG2     = '/fotos/img2home.jpg'
 const COACH_IMG3     = '/fotos/img3home.png'
@@ -669,7 +668,7 @@ export default function Landing() {
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4 min-w-0">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-accent flex items-center justify-center shrink-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-accent flex items-center justify-center shrink-0 shadow-glow">
               <Zap size={15} className="text-white" />
             </div>
             <span className="font-bold text-white tracking-tight text-sm sm:text-base truncate">
@@ -708,82 +707,172 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-12 lg:pt-14 pb-14 sm:pb-20 lg:pb-24">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+      <section className="relative overflow-hidden">
 
-          {/* Copy */}
-          <div className="fade-up order-1">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[11px] sm:text-xs font-semibold mb-4 sm:mb-7">
-              <Star size={11} fill="currentColor" />
-              Asesoramiento Fitness Personalizado
-            </div>
-            <h1 className="text-[2.15rem] sm:text-5xl font-bold text-white leading-[1.06] sm:leading-tight tracking-tight mb-4 sm:mb-6">
-              Transformá tu físico con un plan claro, seguimiento semanal y{' '}
-              <span className="text-gradient">ajustes reales</span>
-            </h1>
-            <p className="text-slate-400 text-[15px] sm:text-lg leading-relaxed mb-6 sm:mb-9">
-              Entrenamiento personalizado, alimentación flexible y correcciones técnicas para que avances con método, datos y acompañamiento real.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 mb-4 sm:mb-7">
-              <Button
-                size="lg"
-                iconRight={ArrowRight}
-                onClick={() => handleScrollTo('como-funciona')}
-                className="w-full sm:w-auto justify-center active:scale-[0.98] transition-transform"
-              >
-                Quiero empezar mi asesoría
-              </Button>
-              <Button
-                variant="secondary"
-                size="lg"
-                onClick={() => navigate('/login')}
-                className="w-full sm:w-auto justify-center active:scale-[0.98] transition-transform"
-              >
-                Ya soy alumno
-              </Button>
-            </div>
-            <p className="text-slate-500 text-sm">
-              Plan personalizado · Seguimiento semanal · Contacto 24/7
-            </p>
-          </div>
+        {/* Fondo de gimnasio — cubre todo el hero */}
+        <img
+          src="/fotos/hero.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none ken-burns"
+        />
 
-          {/* Foto hero */}
-          <div className="fade-up order-2 flex justify-center lg:justify-end" style={{ transitionDelay: '0.1s' }}>
-            <div className="relative w-full max-w-[340px] sm:max-w-[360px] lg:max-w-[430px] mx-auto lg:mx-0">
+        {/* Capas de overlay para legibilidad y estética */}
+        {/* 1. Base oscura general */}
+        <div className="absolute inset-0 bg-[#0a0a0f]/55 pointer-events-none" />
+        {/* 2. Gradiente izquierda → zona de texto siempre legible */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0f] via-[#0a0a0f]/80 to-transparent pointer-events-none" />
+        {/* 3. Gradiente inferior → blend suave con la siguiente sección */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] via-[#0a0a0f]/30 to-transparent pointer-events-none" />
+        {/* 4. Blend con el navbar */}
+        <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-[#0a0a0f]/55 to-transparent pointer-events-none" />
+        {/* 5. Glow violeta derecha — zona lista para el PNG del coach */}
+        <div className="hidden md:block absolute right-0 top-0 bottom-0 w-1/2 bg-accent/[0.04] blur-[100px] pointer-events-none" />
 
-              {/* ── IMAGEN PRINCIPAL — hero limpio ── */}
-              <div className="relative h-[300px] sm:h-[340px] lg:h-[520px] max-h-[520px] rounded-3xl overflow-hidden shadow-2xl">
-                <img
-                  src={COACH_HERO}
-                  alt="Coach de asesoramiento fitness"
-                  className="w-full max-w-full h-full object-cover object-top transition-transform duration-700 hover:scale-[1.02]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/80 via-[#0a0a0f]/10 to-transparent" />
+        {/* Glow detrás del coach — centrado verticalmente en la mitad derecha */}
+        <div className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-accent/[0.07] blur-[100px] pointer-events-none z-[12]" />
+
+        {/* Contenido — grid 2 cols en lg+ */}
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-5 sm:pt-6 lg:pt-8 pb-16 sm:pb-20 lg:pb-24">
+          <div className="grid lg:grid-cols-[1fr_0.85fr] items-start gap-8 lg:gap-12">
+
+            {/* ── Columna izquierda: texto + pills ── */}
+            <div className="relative z-30">
+
+              <div className="fade-up inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[11px] sm:text-xs font-semibold mb-4">
+                <Star size={11} fill="currentColor" />
+                Asesoramiento Fitness Personalizado
               </div>
 
-              {/* Floating card */}
-              <div className="absolute -bottom-3 left-1/2 w-[85%] max-w-[290px] -translate-x-1/2 sm:-left-4 sm:right-auto sm:w-64 sm:max-w-none sm:translate-x-0">
-                <div className="bg-[#111118]/95 backdrop-blur-sm border border-white/[0.08] rounded-2xl p-2.5 sm:p-4 shadow-xl">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                      <TrendingUp size={14} className="text-emerald-400 sm:w-[18px] sm:h-[18px]" />
-                    </div>
-                    <div>
-                      <div className="text-white font-semibold text-[13px] sm:text-sm leading-snug">
-                        Progreso real, semana a semana
-                      </div>
-                      <div className="text-slate-500 text-[11px] sm:text-xs mt-0.5">
-                        Con datos, no con suposiciones
-                      </div>
-                    </div>
+              <p className="fade-up text-slate-400 text-sm font-medium mb-5 sm:mb-6 tracking-wide">
+                por <span className="text-slate-200 font-semibold">Tomás Sánchez</span>
+              </p>
+
+              <h1 className="fade-up text-[2.4rem] sm:text-[3.2rem] lg:text-[3.8rem] font-extrabold text-white leading-[1.05] tracking-tighter mb-5 sm:mb-6">
+                Transformá tu físico con un plan claro, seguimiento semanal y{' '}
+                <span className="text-gradient">ajustes reales</span>
+              </h1>
+
+              <p className="fade-up text-slate-300 text-[15px] sm:text-lg leading-relaxed mb-7 sm:mb-9">
+                Entrenamiento personalizado, alimentación flexible y correcciones técnicas para que avances con método, datos y acompañamiento real.
+              </p>
+
+              <div className="fade-up flex flex-col sm:flex-row gap-3 mb-6 sm:mb-8">
+                <Button
+                  size="lg"
+                  iconRight={ArrowRight}
+                  onClick={() => handleScrollTo('como-funciona')}
+                  className="w-full sm:w-auto justify-center active:scale-[0.98] transition-transform"
+                >
+                  Quiero empezar mi asesoría
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() => navigate('/login')}
+                  className="w-full sm:w-auto justify-center active:scale-[0.98] transition-transform"
+                >
+                  Ya soy alumno
+                </Button>
+              </div>
+
+              <div className="fade-up flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex gap-0.5">
+                    {[0,1,2,3,4].map(i => <Star key={i} size={11} className="text-accent" fill="currentColor" />)}
+                  </div>
+                  <span className="text-slate-300 text-xs font-medium">5.0</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-slate-400 text-xs">
+                  <span className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
+                  <span>Plan personalizado</span>
+                  <span className="text-slate-600">·</span>
+                  <span>Contacto 24/7</span>
+                </div>
+              </div>
+
+              {/* Stat pills glassmorphism */}
+              <div className="fade-up hidden sm:flex flex-wrap gap-3 mt-8 lg:mt-10">
+                <div className="flex items-center gap-2.5 bg-white/[0.07] backdrop-blur-sm border border-white/[0.10] rounded-xl px-3.5 py-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/15 flex items-center justify-center shrink-0">
+                    <TrendingUp size={13} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold text-xs">Progreso real</div>
+                    <div className="text-slate-400 text-[10px]">Semana a semana</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 bg-white/[0.07] backdrop-blur-sm border border-accent/[0.18] rounded-xl px-3.5 py-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-accent/20 border border-accent/15 flex items-center justify-center shrink-0">
+                    <Star size={12} className="text-accent" fill="currentColor" />
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold text-xs">Alta valoración</div>
+                    <div className="text-slate-400 text-[10px]">De mis alumnos</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 bg-white/[0.07] backdrop-blur-sm border border-white/[0.10] rounded-xl px-3.5 py-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-accent/15 border border-accent/10 flex items-center justify-center shrink-0">
+                    <Zap size={13} className="text-accent" />
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold text-xs">Plan personalizado</div>
+                    <div className="text-slate-400 text-[10px]">Desde el día uno</div>
                   </div>
                 </div>
               </div>
 
+              {/* Coach — mobile: imagen sola con glow */}
+              <div className="lg:hidden mt-10 flex justify-center">
+                <div className="relative float-image">
+                  <div className="absolute -inset-6 bg-accent/[0.08] blur-[60px] rounded-full pointer-events-none" />
+                  <img
+                    src="/fotos/coach.png"
+                    alt="Coach de asesoramiento fitness"
+                    className="relative z-10 max-h-[320px] w-auto object-contain select-none"
+                  />
+                </div>
+              </div>
+
             </div>
+
+            {/* ── Columna derecha: imagen integrada sobre el fondo — solo lg+ ── */}
+            <div className="hidden lg:flex items-start justify-center relative z-20 pt-2">
+              <div className="relative float-image">
+
+                {/* Glow sutil detrás — sin card visible */}
+                <div className="absolute -inset-10 bg-accent/[0.10] blur-[90px] rounded-full pointer-events-none" />
+
+                {/* Firma visual — nombre arriba de la imagen */}
+                <div className="absolute top-5 inset-x-0 z-20 flex items-center justify-center gap-3 select-none pointer-events-none">
+                  <div className="h-px w-6 bg-white/20" />
+                  <span className="text-white/50 text-[10px] font-semibold tracking-[0.24em] uppercase">Tomás Sánchez</span>
+                  <div className="h-px w-6 bg-white/20" />
+                </div>
+
+                {/* Imagen directa sobre el fondo del hero */}
+                <img
+                  src="/fotos/coach.png"
+                  alt="Coach de asesoramiento fitness"
+                  className="relative z-10 max-h-[520px] xl:max-h-[580px] w-auto object-contain select-none"
+                />
+
+                {/* Floating stat card */}
+                <div className="absolute -bottom-2 -left-10 z-20 flex items-center gap-3 bg-[#0e0e18]/90 backdrop-blur-md border border-white/[0.10] rounded-2xl px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.65)]">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/15 flex items-center justify-center shrink-0">
+                    <TrendingUp size={16} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold text-sm leading-tight">Progreso real</div>
+                    <div className="text-slate-400 text-xs mt-0.5">Con datos, no suposiciones</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
           </div>
         </div>
-
       </section>
 
       {/* ── PROBLEMA ── */}
@@ -1123,8 +1212,9 @@ export default function Landing() {
       {/* ── CTA FINAL ── */}
       <section className="border-t border-white/[0.05] py-16">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="fade-up bg-gradient-to-br from-accent/15 via-accent/5 to-transparent border border-accent/20 rounded-3xl p-10 sm:p-12 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-accent/20 flex items-center justify-center mx-auto mb-6">
+          <div className="fade-up relative bg-gradient-to-br from-accent/[0.12] via-accent/[0.04] to-transparent border border-accent/25 rounded-3xl p-10 sm:p-12 text-center overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(108,99,255,0.10)_0%,transparent_65%)] pointer-events-none" />
+            <div className="relative w-14 h-14 rounded-2xl bg-accent/20 border border-accent/20 flex items-center justify-center mx-auto mb-6 shadow-glow">
               <Target size={26} className="text-accent" />
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
