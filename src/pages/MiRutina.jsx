@@ -1,49 +1,20 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Dumbbell, Zap, AlertCircle } from 'lucide-react'
+import { Dumbbell, Zap, AlertCircle } from 'lucide-react'
 import { getMyWorkoutPlan } from '../services/workoutService'
 import { PageLoader } from '../components/ui/LoadingSpinner'
-import EmptyState from '../components/ui/EmptyState'
-
-// ── Header de sub-página ─────────────────────────────────────────────────────
-function SubHeader({ title }) {
-  const navigate = useNavigate()
-  return (
-    <header className="sticky top-0 z-40 flex items-center gap-3 px-4 py-4 bg-[#0a0a0f]/95 backdrop-blur-md border-b border-white/[0.06]">
-      <button
-        onClick={() => navigate('/mi-panel')}
-        aria-label="Volver al panel"
-        className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-colors"
-      >
-        <ArrowLeft size={15} />
-      </button>
-      <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-lg bg-accent flex items-center justify-center">
-          <Zap size={11} className="text-white" />
-        </div>
-        <span className="text-white font-semibold text-sm tracking-tight">{title}</span>
-      </div>
-    </header>
-  )
-}
+import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
 // ── Fila de ejercicio de calentamiento ───────────────────────────────────────
 function WarmupRow({ exercise }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-2.5 border-b border-white/[0.04] last:border-0">
-      <div className="flex-1 min-w-0">
-        <div className="text-slate-300 text-sm leading-snug">{exercise.name}</div>
-        {exercise.notes && (
-          <div className="text-slate-600 text-xs mt-0.5 leading-relaxed">{exercise.notes}</div>
-        )}
+    <div className="flex items-start justify-between gap-3 border-b border-white/[0.04] py-2.5 last:border-0">
+      <div className="min-w-0 flex-1">
+        <div className="text-sm leading-snug text-slate-300">{exercise.name}</div>
+        {exercise.notes && <div className="mt-0.5 text-xs leading-relaxed text-slate-600">{exercise.notes}</div>}
       </div>
-      <div className="flex flex-col items-end gap-0.5 shrink-0 text-right">
-        {exercise.sets && (
-          <span className="text-slate-400 text-xs">{exercise.sets} series</span>
-        )}
-        {exercise.rir != null && (
-          <span className="text-slate-600 text-[10px]">RIR {exercise.rir}</span>
-        )}
+      <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+        {exercise.sets && <span className="text-xs text-slate-400">{exercise.sets} series</span>}
+        {exercise.rir != null && <span className="text-[10px] text-slate-600">RIR {exercise.rir}</span>}
       </div>
     </div>
   )
@@ -51,40 +22,27 @@ function WarmupRow({ exercise }) {
 
 // ── Card de ejercicio principal ──────────────────────────────────────────────
 function ExerciseCard({ exercise, index }) {
-  // reps puede ser null (no confirmado) o un string/número
-  const repsText =
-    exercise.reps != null && exercise.reps !== ''
-      ? String(exercise.reps)
-      : null
+  const repsText = exercise.reps != null && exercise.reps !== '' ? String(exercise.reps) : null
 
   return (
-    <div className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-4 flex items-start gap-3">
-      {/* Número */}
-      <span className="w-6 h-6 rounded-lg bg-white/[0.05] flex items-center justify-center text-slate-500 text-[10px] font-semibold shrink-0 mt-0.5">
+    <div className="flex items-start gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-[10px] font-semibold text-slate-500">
         {index + 1}
       </span>
 
-      {/* Nombre + notas */}
-      <div className="flex-1 min-w-0">
-        <div className="text-white text-sm font-medium leading-snug">{exercise.name}</div>
-        {exercise.notes && (
-          <div className="text-slate-500 text-xs mt-1 leading-relaxed">{exercise.notes}</div>
-        )}
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium leading-snug text-white">{exercise.name}</div>
+        {exercise.notes && <div className="mt-1 text-xs leading-relaxed text-slate-500">{exercise.notes}</div>}
       </div>
 
-      {/* Métricas */}
-      <div className="flex flex-col items-end gap-1 shrink-0 text-right">
-        {exercise.sets && (
-          <span className="text-accent text-xs font-semibold">{exercise.sets} series</span>
-        )}
+      <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+        {exercise.sets && <span className="text-xs font-semibold text-accent">{exercise.sets} series</span>}
         {repsText ? (
-          <span className="text-slate-300 text-xs">{repsText} reps</span>
+          <span className="text-xs text-slate-300">{repsText} reps</span>
         ) : (
-          <span className="text-slate-600 text-xs italic">Según indicación</span>
+          <span className="text-xs italic text-slate-600">Según indicación</span>
         )}
-        {exercise.rir != null && (
-          <span className="text-slate-600 text-[10px]">RIR {exercise.rir}</span>
-        )}
+        {exercise.rir != null && <span className="text-[10px] text-slate-600">RIR {exercise.rir}</span>}
       </div>
     </div>
   )
@@ -93,40 +51,29 @@ function ExerciseCard({ exercise, index }) {
 // ── Card de día de entrenamiento ─────────────────────────────────────────────
 function DayCard({ day }) {
   return (
-    <div className="bg-[#111118] border border-white/[0.06] rounded-2xl overflow-hidden">
-      {/* Header del día */}
-      <div className="px-5 pt-5 pb-4 border-b border-white/[0.04]">
-        <span className="inline-flex px-2.5 py-0.5 rounded-lg bg-accent/15 text-accent text-[10px] font-bold uppercase tracking-wide mb-2">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-800">
+      <div className="border-b border-white/[0.04] px-5 pb-4 pt-5">
+        <span className="mb-2 inline-flex rounded-lg bg-accent/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent">
           {day.day}
         </span>
-        <h3 className="text-white font-semibold text-sm leading-snug">{day.focus}</h3>
+        <h3 className="text-sm font-semibold leading-snug text-white">{day.focus}</h3>
       </div>
 
-      <div className="px-5 py-5 flex flex-col gap-5">
-        {/* Calentamiento */}
+      <div className="flex flex-col gap-5 px-5 py-5">
         {day.warmup?.length > 0 && (
           <div>
-            <div className="text-slate-500 text-xs font-semibold uppercase tracking-widest mb-3">
-              Calentamiento
-            </div>
-            <div className="bg-white/[0.02] rounded-xl px-4 py-1">
-              {day.warmup.map((ex, i) => (
-                <WarmupRow key={i} exercise={ex} />
-              ))}
+            <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">Calentamiento</div>
+            <div className="rounded-xl bg-white/[0.02] px-4 py-1">
+              {day.warmup.map((ex, i) => <WarmupRow key={i} exercise={ex} />)}
             </div>
           </div>
         )}
 
-        {/* Ejercicios principales */}
         {day.exercises?.length > 0 && (
           <div>
-            <div className="text-slate-500 text-xs font-semibold uppercase tracking-widest mb-3">
-              Ejercicios
-            </div>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">Ejercicios</div>
             <div className="flex flex-col gap-2">
-              {day.exercises.map((ex, i) => (
-                <ExerciseCard key={i} exercise={ex} index={i} />
-              ))}
+              {day.exercises.map((ex, i) => <ExerciseCard key={i} exercise={ex} index={i} />)}
             </div>
           </div>
         )}
@@ -137,10 +84,9 @@ function DayCard({ day }) {
 
 // ── Página principal ─────────────────────────────────────────────────────────
 export default function MiRutina() {
-  const navigate  = useNavigate()
-  const [plan, setPlan]       = useState(null)
+  const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     getMyWorkoutPlan()
@@ -154,86 +100,68 @@ export default function MiRutina() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] pb-10">
-      <SubHeader title="Mi rutina" />
+    <div className="min-h-[100dvh] bg-surface-900 pb-12">
+      <SubpageHeader title="Mi rutina" subtitle="Ejercicios, series y cargas" />
 
       {loading && <PageLoader label="Cargando tu rutina..." />}
 
       {!loading && error && !plan && (
-        <EmptyState
+        <PanelEmpty
           icon={AlertCircle}
+          tone="danger"
           title="No se pudo cargar la rutina"
           description={error}
         />
       )}
 
       {!loading && !error && !plan && (
-        <EmptyState
+        <PanelEmpty
           icon={Dumbbell}
-          title="No hay rutina activa"
-          description="Tu coach todavía no cargó tu entrenamiento."
+          title="Tu rutina todavía no fue cargada"
+          description="Cuando tu coach cargue tu entrenamiento, vas a ver acá tus días, ejercicios y cargas."
         />
       )}
 
       {!loading && plan && (
-        <div className="max-w-2xl mx-auto px-4 pt-6 flex flex-col gap-6">
-
-          {/* Intro */}
+        <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 pt-6">
           <div>
-            <h1 className="text-xl font-bold text-white">Mi rutina</h1>
-            <p className="text-slate-500 text-sm mt-0.5">
-              Ejercicios y cargas de tu plan actual
-            </p>
+            <h1 className="text-xl font-bold tracking-tight text-white">Mi rutina</h1>
+            <p className="mt-0.5 text-sm text-slate-500">Ejercicios y cargas de tu plan actual</p>
           </div>
 
-          {/* Nombre del plan */}
           {plan.plan && (
-            <div className="bg-[#111118] border border-white/[0.06] rounded-xl px-5 py-4">
-              <div className="text-slate-500 text-xs mb-1">Plan activo</div>
-              <div className="text-white font-semibold text-sm">{plan.plan}</div>
+            <div className="rounded-2xl border border-white/[0.06] bg-surface-800 px-5 py-4">
+              <div className="mb-1 text-xs text-slate-500">Plan activo</div>
+              <div className="text-sm font-semibold text-white">{plan.plan}</div>
             </div>
           )}
 
-          {/* Nota del coach */}
           {plan.notes && (
-            <div className="bg-accent/5 border border-accent/15 rounded-xl p-4 flex items-start gap-3">
-              <div className="w-7 h-7 rounded-xl bg-accent/20 flex items-center justify-center shrink-0 mt-0.5">
+            <div className="flex items-start gap-3 rounded-xl border border-accent/15 bg-accent/[0.06] p-4">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-accent/20">
                 <Zap size={12} className="text-accent" />
               </div>
               <div>
-                <div className="text-accent text-xs font-semibold mb-1">Nota del coach</div>
-                <p className="text-slate-300 text-sm leading-relaxed">{plan.notes}</p>
+                <div className="mb-1 text-xs font-semibold text-accent">Nota del coach</div>
+                <p className="text-sm leading-relaxed text-slate-300">{plan.notes}</p>
               </div>
             </div>
           )}
 
-          {/* Días de entrenamiento */}
           {plan.days?.length > 0 && (
             <div className="flex flex-col gap-4">
-              <h2 className="text-white font-semibold text-sm">
-                Días de entrenamiento{' '}
-                <span className="text-slate-600 font-normal">({plan.days.length} días)</span>
+              <h2 className="text-sm font-semibold text-white">
+                Días de entrenamiento <span className="font-normal text-slate-600">({plan.days.length} días)</span>
               </h2>
-              {plan.days.map((day, i) => (
-                <DayCard key={i} day={day} />
-              ))}
+              {plan.days.map((day, i) => <DayCard key={i} day={day} />)}
             </div>
           )}
 
-          {/* Aclaración sobre reps */}
-          <p className="text-slate-600 text-xs leading-relaxed">
+          <p className="text-xs leading-relaxed text-slate-600">
             Los valores marcados como "Según indicación" serán confirmados por tu coach en la próxima revisión.
           </p>
 
-          {/* Volver */}
-          <button
-            onClick={() => navigate('/mi-panel')}
-            className="flex items-center gap-2 text-slate-500 hover:text-white text-sm transition-colors self-start mt-2"
-          >
-            <ArrowLeft size={14} />
-            Volver a mi panel
-          </button>
-
+          <BackToPanel />
         </div>
       )}
     </div>

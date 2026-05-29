@@ -1,13 +1,36 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { mockCheckins } from '../data/mockCheckins'
 
+// ---------------------------------------------------------------------------
+// Normaliza una fila real de checkins (snake_case) al shape camelCase del UI.
+// Si ya viene en formato mock (tiene coachFeedback), se devuelve intacta.
+// ---------------------------------------------------------------------------
+function normalizeCheckin(row) {
+  if (!row) return null
+  if (row.coachFeedback !== undefined) return row // mock ya normalizado
+  return {
+    id: row.id,
+    date: row.created_at ? String(row.created_at).slice(0, 10) : null,
+    weight: row.weight ?? null,
+    energy: row.energy ?? null,
+    hunger: row.hunger ?? null,
+    sleep: row.sleep ?? null,
+    stress: row.stress ?? null,
+    nutritionAdherence: row.nutrition_adherence ?? null,
+    trainingAdherence: row.training_adherence ?? null,
+    clientComment: row.client_comment ?? null,
+    coachFeedback: row.coach_feedback ?? null,
+    decision: row.decision ?? null,
+  }
+}
+
 /**
- * Retorna los check-ins de un cliente (más recientes primero).
+ * Retorna los check-ins de un cliente (más recientes primero, normalizados).
  */
 export async function getCheckins(clientId, limit = 10) {
   if (!isSupabaseConfigured) {
     const filtered = mockCheckins.filter((c) => c.clientId === clientId)
-    return { data: filtered, error: null, source: 'mock' }
+    return { data: filtered.map(normalizeCheckin), error: null, source: 'mock' }
   }
 
   const { data, error } = await supabase
@@ -17,7 +40,7 @@ export async function getCheckins(clientId, limit = 10) {
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  return { data, error, source: 'supabase' }
+  return { data: error ? [] : (data ?? []).map(normalizeCheckin), error, source: 'supabase' }
 }
 
 /**
@@ -43,11 +66,8 @@ export async function getAllRecentCheckins(limit = 20) {
 export async function getMyCheckins(limit = 10) {
   if (!isSupabaseConfigured) {
     const client = mockCheckins[0]
-    return {
-      data: client ? mockCheckins.filter((c) => c.clientId === client.clientId) : [],
-      error: null,
-      source: 'mock',
-    }
+    const filtered = client ? mockCheckins.filter((c) => c.clientId === client.clientId) : []
+    return { data: filtered.map(normalizeCheckin), error: null, source: 'mock' }
   }
 
   const { data: { user } } = await supabase.auth.getUser()
