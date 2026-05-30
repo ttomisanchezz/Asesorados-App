@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Utensils, Zap, AlertCircle } from 'lucide-react'
+import { Utensils, Zap, AlertCircle, ChevronDown } from 'lucide-react'
 import { getMyNutritionPlan } from '../services/nutritionService'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
+
+const NOTES_PREVIEW_LIMIT = 140
 
 // ── Tile de macro (calorías, proteínas, etc.) ────────────────────────────────
 function MacroTile({ label, value, unit, color }) {
@@ -13,6 +15,46 @@ function MacroTile({ label, value, unit, color }) {
         {value}
         <span className="ml-0.5 text-sm font-normal text-slate-500">{unit}</span>
       </span>
+    </div>
+  )
+}
+
+// ── Nota del coach compacta con acordeón ────────────────────────────────────
+function CoachNote({ notes }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = notes.length > NOTES_PREVIEW_LIMIT
+  const preview = isLong ? notes.slice(0, NOTES_PREVIEW_LIMIT).trimEnd() + '…' : notes
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-800">
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.04]">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15">
+          <Zap size={12} className="text-accent" />
+        </span>
+        <span className="text-xs font-semibold text-accent tracking-wide">Nota del coach</span>
+      </div>
+
+      {/* Texto */}
+      <div className="px-4 pt-3 pb-4">
+        <p className="text-sm leading-relaxed text-slate-300">
+          {expanded || !isLong ? notes : preview}
+        </p>
+
+        {isLong && (
+          <button
+            type="button"
+            onClick={() => setExpanded(v => !v)}
+            className="mt-2.5 flex items-center gap-1 text-xs font-medium text-accent/80 hover:text-accent transition-colors"
+          >
+            {expanded ? 'Ver menos' : 'Ver nota completa'}
+            <ChevronDown
+              size={13}
+              className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+            />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -60,23 +102,47 @@ function MealSlot({ meal }) {
   )
 }
 
-// ── Esquema de dieta completo (Dieta 1, Dieta 2, …) ─────────────────────────
-function SchemeSection({ scheme, index }) {
+// ── Esquema de dieta como acordeón ──────────────────────────────────────────
+function SchemeSection({ scheme, index, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen)
+
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-800">
-      <div className="border-b border-white/[0.04] px-5 pb-4 pt-5">
-        <div className="mb-1.5 flex items-center gap-2">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-[10px] font-bold text-accent">
-            {index + 1}
-          </span>
-          <h3 className="text-sm font-semibold leading-snug text-white">{scheme.scheme}</h3>
-        </div>
-        {scheme.description && <p className="text-xs leading-relaxed text-slate-500">{scheme.description}</p>}
-      </div>
+      {/* Header — tap target mínimo 44px */}
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-start gap-3 px-5 py-4 text-left min-h-[56px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      >
+        {/* Chip de número */}
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-[10px] font-bold text-accent">
+          {index + 1}
+        </span>
 
-      <div className="flex flex-col gap-6 px-5 py-5">
-        {scheme.meals?.map((meal, i) => <MealSlot key={i} meal={meal} />)}
-      </div>
+        {/* Títulos */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold leading-snug text-white">{scheme.scheme}</p>
+          {scheme.description && (
+            <p className="mt-0.5 text-xs leading-relaxed text-slate-500 line-clamp-2">
+              {scheme.description}
+            </p>
+          )}
+        </div>
+
+        {/* Chevron */}
+        <ChevronDown
+          size={16}
+          className={`mt-0.5 shrink-0 text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Contenido colapsable */}
+      {open && (
+        <div className="border-t border-white/[0.04] flex flex-col gap-6 px-5 py-5">
+          {scheme.meals?.map((meal, i) => <MealSlot key={i} meal={meal} />)}
+        </div>
+      )}
     </div>
   )
 }
@@ -141,24 +207,16 @@ export default function MiNutricion() {
             <MacroTile label="Grasas" value={plan.fat} unit="g" color="text-sky-400" />
           </div>
 
-          {plan.notes && (
-            <div className="flex items-start gap-3 rounded-xl border border-accent/15 bg-accent/[0.06] p-4">
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-accent/20">
-                <Zap size={12} className="text-accent" />
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-accent">Nota del coach</div>
-                <p className="text-sm leading-relaxed text-slate-300">{plan.notes}</p>
-              </div>
-            </div>
-          )}
+          {plan.notes && <CoachNote notes={plan.notes} />}
 
           {plan.meals?.length > 0 && (
             <div className="flex flex-col gap-4">
               <h2 className="text-sm font-semibold text-white">
                 Esquemas de dieta <span className="font-normal text-slate-600">({plan.meals.length})</span>
               </h2>
-              {plan.meals.map((scheme, i) => <SchemeSection key={i} scheme={scheme} index={i} />)}
+              {plan.meals.map((scheme, i) => (
+                <SchemeSection key={i} scheme={scheme} index={i} defaultOpen={i === 0} />
+              ))}
             </div>
           )}
 

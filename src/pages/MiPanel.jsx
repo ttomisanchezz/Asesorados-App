@@ -46,6 +46,8 @@ function PanelHeader({ onSignOut }) {
 // ── Card de métrica con diferenciación dato real / sin dato ──────────────────
 function MetricCard({ icon: Icon, label, value, unit, hint, emptyHint, valueClass = 'text-white' }) {
   const hasValue = value !== null && value !== undefined && value !== ''
+  // Detectar si el value es numérico (número JS o string que solo contiene dígitos/punto/coma/signo)
+  const isNumeric = typeof value === 'number' || /^[\d.,-]+$/.test(String(value ?? ''))
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-surface-800 p-4 transition-colors hover:border-white/[0.1]">
       <div className="mb-3 flex items-center gap-2">
@@ -53,10 +55,16 @@ function MetricCard({ icon: Icon, label, value, unit, hint, emptyHint, valueClas
         <span className="text-xs text-slate-500">{label}</span>
       </div>
       {hasValue ? (
-        <div className={`text-2xl font-bold leading-none ${valueClass}`}>
-          {value}
-          {unit && <span className="ml-1 text-sm font-medium text-slate-500">{unit}</span>}
-        </div>
+        isNumeric ? (
+          <div className={`text-2xl font-bold leading-none ${valueClass}`}>
+            {value}
+            {unit && <span className="ml-1 text-sm font-medium text-slate-500">{unit}</span>}
+          </div>
+        ) : (
+          <div className={`text-base font-semibold leading-snug ${valueClass}`}>
+            {value}
+          </div>
+        )
       ) : (
         <div className="text-base font-semibold text-slate-600">Sin registro</div>
       )}
@@ -128,7 +136,9 @@ export default function MiPanel() {
 
   // ── Datos derivados (sin inventar) ─────────────────────────────────────────
   const firstName = client.name?.trim().split(' ')[0]
-  const lastCheckin = checkins[0] ?? null
+  // Guard defensivo: checkins reales (array) o vacío. Nunca depende de mocks.
+  const safeCheckins = Array.isArray(checkins) ? checkins : []
+  const lastCheckin = safeCheckins[0] ?? null
   const nextCheckinDate = client.nextReview ? new Date(client.nextReview) : null
   const daysUntilCheckin = nextCheckinDate
     ? Math.ceil((nextCheckinDate - new Date()) / (1000 * 60 * 60 * 24))
@@ -196,10 +206,9 @@ export default function MiPanel() {
             <MetricCard
               icon={Target}
               label="Objetivo"
-              value={client.targetWeight}
-              unit="kg"
+              value={client.objective || null}
               valueClass="text-accent-light"
-              hint="Peso objetivo del plan"
+              hint="Objetivo del plan"
               emptyHint="Sin objetivo definido"
             />
             <MetricCard
@@ -339,20 +348,29 @@ export default function MiPanel() {
               <div className="flex flex-col gap-4">
                 {training.days?.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => {
-                      const dayMap = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-                      const active = training.days.includes(dayMap[i])
-                      return (
-                        <div
-                          key={d}
-                          className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold ${
-                            active ? 'bg-accent text-white' : 'bg-white/[0.04] text-slate-600'
-                          }`}
-                        >
-                          {d}
-                        </div>
-                      )
-                    })}
+                    {(() => {
+                      // 0=Lunes … 5=Sábado, 6=Domingo — alineado con el array L M X J V S D
+                      const todayIdx = (new Date().getDay() + 6) % 7
+                      return ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => {
+                        const dayMap = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+                        const active = training.days.includes(dayMap[i])
+                        const isToday = i === todayIdx
+                        return (
+                          <div
+                            key={d}
+                            className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold ${
+                              isToday
+                                ? 'bg-rose-500 text-white'
+                                : active
+                                  ? 'bg-accent text-white'
+                                  : 'bg-white/[0.04] text-slate-600'
+                            }`}
+                          >
+                            {d}
+                          </div>
+                        )
+                      })
+                    })()}
                   </div>
                 )}
 
@@ -511,34 +529,24 @@ export default function MiPanel() {
             </SectionCard>
           )}
 
-          {/* Seguimiento — accesos que no se repiten con los previews de arriba */}
+          {/* Seguimiento — Check-ins (card full-width intencional) */}
           <section className="flex flex-col gap-3">
             <h2 className="px-1 text-xs font-semibold uppercase tracking-widest text-slate-500">
               Seguimiento
             </h2>
-            <nav aria-label="Seguimiento" className="grid grid-cols-2 gap-3">
-              {[
-                { to: '/mi-panel/check-ins', icon: ClipboardCheck, title: 'Check-ins', desc: 'Historial semanal y registro' },
-                { to: '/mi-panel/progreso', icon: TrendingUp, title: 'Mi progreso', desc: 'Peso, medidas y evolución' },
-              ].map(({ to, icon: Icon, title, desc }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className="group flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-surface-800 p-5 transition-all hover:-translate-y-0.5 hover:border-accent/25 hover:bg-surface-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 transition-colors group-hover:bg-accent/20">
-                      <Icon size={19} className="text-accent" strokeWidth={1.75} />
-                    </div>
-                    <ChevronRight size={16} className="text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-accent" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-white">{title}</div>
-                    <div className="mt-0.5 text-xs leading-snug text-slate-500">{desc}</div>
-                  </div>
-                </Link>
-              ))}
-            </nav>
+            <Link
+              to="/mi-panel/check-ins"
+              className="group flex items-center gap-4 rounded-2xl border border-white/[0.06] bg-surface-800 p-5 transition-all hover:-translate-y-0.5 hover:border-accent/25 hover:bg-surface-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/10 transition-colors group-hover:bg-accent/20">
+                <ClipboardCheck size={20} className="text-accent" strokeWidth={1.75} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-white">Check-ins</div>
+                <div className="mt-0.5 text-xs leading-snug text-slate-500">Historial semanal y registro</div>
+              </div>
+              <ChevronRight size={17} className="shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-accent" />
+            </Link>
           </section>
 
         </div>
