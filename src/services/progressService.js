@@ -11,16 +11,21 @@ function normalizeProgress(data) {
   if (!Array.isArray(data)) return data.weightHistory ? data : null
   if (data.length === 0) return null
 
-  // Las filas vienen newest-first; para el gráfico las queremos oldest-first.
-  const ordered = [...data].reverse()
+  // Orden cronológico real: ascendente por created_at (la fecha del registro).
+  const ordered = [...data].sort(
+    (a, b) => new Date(a.created_at) - new Date(b.created_at),
+  )
   const withWeight = ordered.filter((r) => r.weight != null)
   const label = (iso) =>
     new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 
-  const latest = data[0] // fila más reciente
+  const latest = ordered[ordered.length - 1] // fila más reciente por fecha
   return {
+    count: ordered.length,
     weightHistory: withWeight.map((r) => Number(r.weight)),
     dates: withWeight.map((r) => label(r.created_at)),
+    // points: serie limpia para el gráfico/estadísticas
+    points: withWeight.map((r) => ({ weight: Number(r.weight), iso: r.created_at })),
     measurements: {
       waist: latest.waist ?? null,
       chest: latest.chest ?? null,
@@ -35,7 +40,7 @@ function normalizeProgress(data) {
 /**
  * Retorna el historial de métricas de progreso de un cliente (normalizado).
  */
-export async function getProgressMetrics(clientId, limit = 20) {
+export async function getProgressMetrics(clientId, limit = 365) {
   if (!isSupabaseConfigured) {
     const client = mockClients.find((c) => c.id === clientId)
     return { data: normalizeProgress(client?.progress ?? null), error: null, source: 'mock' }
@@ -72,6 +77,88 @@ export async function getMyProgress() {
   if (!clientData) return { data: null, error: null, source: 'supabase' }
 
   return getProgressMetrics(clientData.id)
+}
+
+/**
+ * El asesorado autenticado registra (o actualiza) su propio peso del día.
+ *
+ * Seguridad:
+ *   - Usa el usuario autenticado; resuelve client_id y coach_id REALES desde la
+ *     fila de `clients` (clients.user_id = auth.uid()). Nunca hardcodea IDs.
+ *   - No usa service_role: corre con la sesión del navegador y la anon key.
+ *   - La escritura final la autoriza RLS. Si el asesorado no tiene policy de
+ *     INSERT/UPDATE sobre progress_metrics, Supabase rechaza la operación
+ *     (no se saltea RLS desde acá).
+ *
+ * @param {{ weight:number, date:string, notes?:string }} payload  date = 'YYYY-MM-DD'
+ * @returns {{ data, error, updated }}  updated=true si se actualizó un registro existente de esa fecha
+ */
+export async function addMyProgressEntry({ weight, date, notes }) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Requiere Supabase configurado'), updated: false }
+  }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error('No autenticado'), updated: false }
+
+  const { data: client, error: cErr } = await supabase
+    .from('clients')
+    .select('id, coach_id')
+    .eq('user_id', user.id)
+    .single()
+  if (cErr || !client) {
+    return { data: null, error: cErr || new Error('Perfil no encontrado'), updated: false }
+  }
+
+  // ¿Ya hay un registro para ese día? (no duplicar)
+  const dayStart = `${date}T00:00:00.000Z`
+  const dayEnd = `${date}T23:59:59.999Z`
+  const { data: existing } = await supabase
+    .from('progress_metrics')
+    .select('id')
+    .eq('client_id', client.id)
+    .gte('created_at', dayStart)
+    .lte('created_at', dayEnd)
+    .limit(1)
+
+  const updating = Array.isArray(existing) && existing.length > 0
+  let result
+  if (updating) {
+    result = await supabase
+      .from('progress_metrics')
+      .update({ weight, notes: notes || null })
+      .eq('id', existing[0].id)
+      .select()
+      .single()
+  } else {
+    result = await supabase
+      .from('progress_metrics')
+      .insert({
+        client_id: client.id,
+        coach_id: client.coach_id,
+        weight,
+        notes: notes || null,
+        created_at: `${date}T12:00:00.000Z`,
+      })
+      .select()
+      .single()
+  }
+  if (result.error) return { data: null, error: result.error, updated: updating }
+
+  // Si esta es la fecha más reciente, sincronizar clients.weight (best-effort:
+  // puede estar restringido por RLS para el asesorado; si falla, no rompe el alta).
+  const { data: latest } = await supabase
+    .from('progress_metrics')
+    .select('created_at')
+    .eq('client_id', client.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  const isMostRecent = !latest?.length || `${date}T12:00:00.000Z` >= latest[0].created_at
+  if (isMostRecent) {
+    await supabase.from('clients').update({ weight }).eq('id', client.id)
+  }
+
+  return { data: result.data, error: null, updated: updating }
 }
 
 /**
