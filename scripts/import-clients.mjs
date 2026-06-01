@@ -14,6 +14,14 @@
 //   $env:SUPABASE_SERVICE_ROLE_KEY="..."; node scripts/import-clients.mjs eze --verify    # solo lectura
 //   node scripts/import-clients.mjs            # dry-run de TODOS (menos lu)
 //   node scripts/import-clients.mjs eze --parse-only   # sin DB, valida la extracción
+//   node scripts/import-clients.mjs mateo --apply --update-profile   # sobrescribe perfil ya cargado
+//
+// FLAGS:
+//   --apply           escribe en la DB (por defecto: dry-run)
+//   --verify          solo lectura, resumen compacto
+//   --parse-only      sin DB, solo valida la extracción de los archivos
+//   --update-profile  en clientes EXISTENTES, sobrescribe full_name/objective/age/weight/height
+//                     con lo parseado (sin la flag solo rellena gaps; nunca pisa datos cargados)
 //
 // COACH (clients.coach_id → public.profiles.id → auth.users.id):
 //   $env:COACH_EMAIL="coach@dominio.com"   # recomendado: resuelve y valida el profile
@@ -35,6 +43,9 @@ const IMPORTS = path.join(ROOT, 'imports')
 const APPLY = process.argv.includes('--apply')
 const PARSE_ONLY = process.argv.includes('--parse-only')
 const VERIFY = process.argv.includes('--verify')
+// Por defecto, en clientes EXISTENTES solo se rellenan gaps (nunca pisa datos).
+// Con --update-profile se autoriza explícitamente sobrescribir full_name/objective/age/weight/height.
+const UPDATE_PROFILE = process.argv.includes('--update-profile')
 const argClient = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : null
 
 // Registro de asesorados. lu queda EXCLUIDA a propósito (perfil modelo).
@@ -318,14 +329,39 @@ async function processClient(sb, key, coachId, errors) {
   }
 
   if (existing) {
-    const gaps = {}
-    for (const [k, v] of Object.entries(clientFields)) if (v !== undefined && (existing[k] == null || existing[k] === '')) gaps[k] = v
-    console.log(`  DB clients: EXISTE (id=${String(clientId).slice(0, 8)}…). Rellenar gaps: ${Object.keys(gaps).length ? JSON.stringify(gaps) : '—'}`)
-    if (APPLY && Object.keys(gaps).length) {
-      const { error } = await sb.from('clients').update(gaps).eq('id', clientId)
-      if (error) {
-        console.log('    ✗ error update clients:', error.message)
-        errors.push({ client: key, step: 'clients.update', message: error.message })
+    if (UPDATE_PROFILE) {
+      // Modo explícito: sobrescribe campos de perfil con lo PARSEADO (solo si hay dato real).
+      // full_name nunca se pisa con un placeholder/fallback: requiere nombre real del docx.
+      const candidates = {
+        full_name: profile.name || undefined,
+        objective: objective ?? undefined,
+        age: profile.age ?? undefined,
+        weight: profile.weight ?? undefined,
+        height: profile.height ?? undefined,
+      }
+      const updates = {}
+      for (const [k, v] of Object.entries(candidates)) {
+        if (v !== undefined && v !== null && v !== '' && String(existing[k]) !== String(v)) updates[k] = v
+      }
+      console.log(`  DB clients: EXISTE (id=${String(clientId).slice(0, 8)}…) · --update-profile · sobrescribe: ${Object.keys(updates).length ? JSON.stringify(updates) : '— (ya coincide, sin cambios)'}`)
+      if (APPLY && Object.keys(updates).length) {
+        const { error } = await sb.from('clients').update(updates).eq('id', clientId)
+        if (error) {
+          console.log('    ✗ error update clients:', error.message)
+          errors.push({ client: key, step: 'clients.update', message: error.message })
+        }
+      }
+    } else {
+      const gaps = {}
+      for (const [k, v] of Object.entries(clientFields)) if (v !== undefined && (existing[k] == null || existing[k] === '')) gaps[k] = v
+      console.log(`  DB clients: EXISTE (id=${String(clientId).slice(0, 8)}…). Rellenar gaps: ${Object.keys(gaps).length ? JSON.stringify(gaps) : '—'}` +
+        (Object.values(clientFields).some((v) => v !== undefined) ? '  (usá --update-profile para sobrescribir datos ya cargados)' : ''))
+      if (APPLY && Object.keys(gaps).length) {
+        const { error } = await sb.from('clients').update(gaps).eq('id', clientId)
+        if (error) {
+          console.log('    ✗ error update clients:', error.message)
+          errors.push({ client: key, step: 'clients.update', message: error.message })
+        }
       }
     }
   } else {
