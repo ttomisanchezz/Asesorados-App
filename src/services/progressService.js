@@ -107,7 +107,9 @@ export async function addMyProgressEntry({ weight, date, notes }) {
     .eq('user_id', user.id)
     .single()
   if (cErr || !client) {
-    return { data: null, error: cErr || new Error('Perfil no encontrado'), updated: false }
+    // Sin client vinculado al usuario: no es un problema de permisos, es que
+    // todavía no existe la relación clients.user_id = auth.uid().
+    return { data: null, error: cErr || new Error('Perfil no encontrado'), updated: false, reason: 'no-client' }
   }
 
   // ¿Ya hay un registro para ese día? (no duplicar)
@@ -145,19 +147,8 @@ export async function addMyProgressEntry({ weight, date, notes }) {
   }
   if (result.error) return { data: null, error: result.error, updated: updating }
 
-  // Si esta es la fecha más reciente, sincronizar clients.weight (best-effort:
-  // puede estar restringido por RLS para el asesorado; si falla, no rompe el alta).
-  const { data: latest } = await supabase
-    .from('progress_metrics')
-    .select('created_at')
-    .eq('client_id', client.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-  const isMostRecent = !latest?.length || `${date}T12:00:00.000Z` >= latest[0].created_at
-  if (isMostRecent) {
-    await supabase.from('clients').update({ weight }).eq('id', client.id)
-  }
-
+  // clients.weight (peso denormalizado) lo sincroniza el trigger
+  // sync_client_weight en la DB de forma segura — no hace falta tocarlo desde acá.
   return { data: result.data, error: null, updated: updating }
 }
 

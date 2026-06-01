@@ -5,6 +5,7 @@ function normalizeWorkoutPlan(raw) {
   if (!raw) return null
   if (raw.plan !== undefined) return raw // ya normalizado (mock)
   return {
+    id:        raw.id ?? null,
     plan:      raw.title ?? '',
     days:      raw.days ?? [],
     exercises: raw.exercises ?? [],

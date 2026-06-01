@@ -140,7 +140,7 @@ function WeightForm({ onSaved }) {
     if (!date) return setMsg({ type: 'error', text: 'Elegí una fecha.' })
 
     setSaving(true)
-    const { error, updated } = await addMyProgressEntry({
+    const { error, updated, reason } = await addMyProgressEntry({
       weight: Math.round(w * 100) / 100,
       date,
       notes: note.trim() || undefined,
@@ -148,11 +148,19 @@ function WeightForm({ onSaved }) {
     setSaving(false)
 
     if (error) {
+      // Único caso legítimo de "no podés registrar": no hay client vinculado a tu user.
+      if (reason === 'no-client') {
+        setMsg({
+          type: 'error',
+          text: 'No encontramos tu perfil de asesorado vinculado. Contactá a tu coach.',
+        })
+        return
+      }
       const denied = error.code === '42501' || /row-level security|permission|policy/i.test(error.message || '')
       setMsg({
         type: 'error',
         text: denied
-          ? 'Tu cuenta todavía no tiene permiso para registrar peso. Avisale a tu coach.'
+          ? 'No se pudo guardar por permisos. Si el problema persiste, avisale a tu coach.'
           : error.message || 'No se pudo guardar el registro.',
       })
       return

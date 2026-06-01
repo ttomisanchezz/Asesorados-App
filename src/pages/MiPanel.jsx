@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import SectionCard from '../components/ui/SectionCard'
-import ProgressBar from '../components/ui/ProgressBar'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
@@ -16,6 +15,18 @@ import { getMyNutritionPlan } from '../services/nutritionService'
 import { getMyWorkoutPlan } from '../services/workoutService'
 import { getMyProgress } from '../services/progressService'
 import { getMyCheckins } from '../services/checkinService'
+import { getMyWeeklyTrainingCount } from '../services/workoutLogService'
+
+// Inicio de la semana actual (lunes 00:00 hora local).
+function startOfWeek(d = new Date()) {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7)) // 0 = lunes
+  return x
+}
+
+const fmtShortDate = (iso) =>
+  new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 
 // ── Header del panel ─────────────────────────────────────────────────────────
 // Declarado a nivel de módulo (no dentro del render) para no recrear el
@@ -75,6 +86,22 @@ function MetricCard({ icon: Icon, label, value, unit, hint, emptyHint, valueClas
   )
 }
 
+// ── Fila del resumen semanal ─────────────────────────────────────────────────
+function SummaryRow({ icon: Icon, label, value, sub, empty }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-white/[0.04] py-3 last:border-0">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Icon size={15} className="shrink-0 text-slate-500" strokeWidth={1.75} />
+        <span className="text-sm text-slate-400">{label}</span>
+      </div>
+      <div className="text-right">
+        <div className={`text-sm font-semibold ${empty ? 'text-slate-600' : 'text-white'}`}>{value}</div>
+        {sub && <div className="mt-0.5 text-[11px] text-slate-600">{sub}</div>}
+      </div>
+    </div>
+  )
+}
+
 export default function MiPanel() {
   const navigate = useNavigate()
   const { signOut } = useAuth()
@@ -83,6 +110,7 @@ export default function MiPanel() {
   const [training, setTraining] = useState(null)
   const [progress, setProgress] = useState(null)
   const [checkins, setCheckins] = useState([])
+  const [weeklyTrainings, setWeeklyTrainings] = useState(0)
   const [loading, setLoading] = useState(true)
 
   async function handleSignOut() {
@@ -94,19 +122,22 @@ export default function MiPanel() {
     // Perfil + planes + progreso + check-ins en paralelo, con los services
     // existentes (cada uno resuelve client_id desde auth.uid() y respeta demo).
     // allSettled aísla fallos: un fetch que falle no deja en blanco el panel.
+    const weekStartIso = startOfWeek().toISOString()
     Promise.allSettled([
       getMyClientProfile(),
       getMyNutritionPlan(),
       getMyWorkoutPlan(),
       getMyProgress(),
       getMyCheckins(),
+      getMyWeeklyTrainingCount(weekStartIso),
     ])
-      .then(([profile, nutri, workout, prog, checks]) => {
+      .then(([profile, nutri, workout, prog, checks, weeklyTrain]) => {
         setClient(profile.status === 'fulfilled' ? (profile.value?.data ?? null) : null)
         setNutrition(nutri.status === 'fulfilled' ? (nutri.value?.data ?? null) : null)
         setTraining(workout.status === 'fulfilled' ? (workout.value?.data ?? null) : null)
         setProgress(prog.status === 'fulfilled' ? (prog.value?.data ?? null) : null)
         setCheckins(checks.status === 'fulfilled' && Array.isArray(checks.value?.data) ? checks.value.data : [])
+        setWeeklyTrainings(weeklyTrain.status === 'fulfilled' ? (weeklyTrain.value?.count ?? 0) : 0)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -144,11 +175,32 @@ export default function MiPanel() {
     ? Math.ceil((nextCheckinDate - new Date()) / (1000 * 60 * 60 * 24))
     : null
 
-  const hasNutritionAdh = client.adherenceNutrition > 0
-  const hasTrainingAdh = client.adherenceTraining > 0
-  const hasWeeklyData = hasNutritionAdh || hasTrainingAdh
-  // "Falta info" cuando no hay ni peso ni adherencia cargada
-  const dataPending = !client.weight && !hasWeeklyData
+  // ── Datos reales de la semana actual (sin denormalizar, sin mock) ──────────
+  const weekStart = startOfWeek()
+
+  // Peso actual = último punto real de progress_metrics; fallback a la ficha.
+  const progressPoints = progress?.points ?? []
+  const lastPoint = progressPoints.length ? progressPoints[progressPoints.length - 1] : null
+  const currentWeight = lastPoint?.weight ?? client.weight ?? null
+  const currentWeightDate = lastPoint?.iso ?? null
+
+  // Adherencia nutricional = check-in de esta semana con dato de adherencia.
+  const weekCheckins = safeCheckins.filter((c) => c.date && new Date(c.date) >= weekStart)
+  const weekNutriCheckin = weekCheckins.find((c) => c.nutritionAdherence != null) ?? null
+  const nutritionAdh = weekNutriCheckin?.nutritionAdherence ?? null
+
+  // Adherencia entrenamiento = workout_sessions de la semana vs días del plan.
+  const planDays = training?.days?.length ?? 0
+  const trainingsDone = weeklyTrainings
+  const trainingValue = trainingsDone > 0
+    ? (planDays > 0 ? `${trainingsDone}/${planDays}` : `${trainingsDone}`)
+    : null
+
+  // ¿Hay algo real que resumir esta semana?
+  const hasWeeklyData =
+    currentWeight != null || trainingsDone > 0 || weekCheckins.length > 0
+  // "Falta info" cuando no hay ni peso ni actividad de la semana.
+  const dataPending = currentWeight == null && !hasWeeklyData
 
   const today = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -198,10 +250,10 @@ export default function MiPanel() {
             <MetricCard
               icon={Scale}
               label="Peso actual"
-              value={client.weight}
+              value={currentWeight}
               unit="kg"
-              hint="Último registro cargado"
-              emptyHint="Tu coach todavía no cargó este dato"
+              hint={currentWeightDate ? `Último registro · ${fmtShortDate(currentWeightDate)}` : 'Último registro cargado'}
+              emptyHint="Cargá tu peso en Mi progreso"
             />
             <MetricCard
               icon={Target}
@@ -214,20 +266,19 @@ export default function MiPanel() {
             <MetricCard
               icon={Utensils}
               label="Adherencia nutricional"
-              value={hasNutritionAdh ? client.adherenceNutrition : null}
+              value={nutritionAdh}
               unit="%"
-              valueClass={client.adherenceNutrition >= 85 ? 'text-emerald-400' : 'text-amber-400'}
-              hint="Promedio de la semana"
-              emptyHint="Aún sin registros esta semana"
+              valueClass={nutritionAdh >= 85 ? 'text-emerald-400' : 'text-amber-400'}
+              hint="Check-in de esta semana"
+              emptyHint="Sin check-in esta semana"
             />
             <MetricCard
               icon={Dumbbell}
               label="Adherencia entrenamiento"
-              value={hasTrainingAdh ? client.adherenceTraining : null}
-              unit="%"
-              valueClass={client.adherenceTraining >= 85 ? 'text-emerald-400' : 'text-amber-400'}
-              hint="Promedio de la semana"
-              emptyHint="Aún sin registros esta semana"
+              value={trainingValue}
+              valueClass="text-emerald-400"
+              hint={planDays > 0 ? 'Entrenos completados esta semana' : 'Entrenos de esta semana'}
+              emptyHint="Sin entrenos registrados esta semana"
             />
           </div>
 
@@ -268,21 +319,47 @@ export default function MiPanel() {
             </div>
           )}
 
-          {/* Resumen de la semana */}
+          {/* Resumen de la semana — datos reales */}
           {hasWeeklyData ? (
-            <SectionCard title="Resumen de la semana" subtitle="Tu adherencia hasta hoy">
-              <div className="flex flex-col gap-3.5">
-                <ProgressBar
-                  label="Nutrición"
-                  value={client.adherenceNutrition}
-                  color={client.adherenceNutrition >= 85 ? 'emerald' : 'amber'}
+            <SectionCard title="Resumen de la semana" subtitle="Tu actividad hasta hoy">
+              <div className="flex flex-col">
+                <SummaryRow
+                  icon={Scale}
+                  label="Peso reciente"
+                  value={currentWeight != null ? `${currentWeight} kg` : 'Sin registro'}
+                  sub={currentWeightDate ? fmtShortDate(currentWeightDate) : null}
+                  empty={currentWeight == null}
                 />
-                <ProgressBar
-                  label="Entrenamiento"
-                  value={client.adherenceTraining}
-                  color={client.adherenceTraining >= 85 ? 'emerald' : 'amber'}
+                <SummaryRow
+                  icon={Dumbbell}
+                  label="Entrenamientos"
+                  value={trainingsDone > 0 ? (planDays > 0 ? `${trainingsDone}/${planDays}` : `${trainingsDone}`) : 'Sin registro'}
+                  sub={trainingsDone > 0 && planDays > 0 ? 'según tu plan' : null}
+                  empty={trainingsDone === 0}
                 />
+                <SummaryRow
+                  icon={ClipboardCheck}
+                  label="Check-ins"
+                  value={weekCheckins.length > 0 ? `${weekCheckins.length} esta semana` : 'Sin registro'}
+                  empty={weekCheckins.length === 0}
+                />
+                {nutritionAdh != null && (
+                  <SummaryRow
+                    icon={Utensils}
+                    label="Adherencia nutricional"
+                    value={`${nutritionAdh}%`}
+                  />
+                )}
               </div>
+
+              {lastCheckin?.coachFeedback && (
+                <div className="mt-3 rounded-xl border border-accent/10 bg-accent/[0.06] p-3.5">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-accent">
+                    <MessageSquare size={12} /> Nota reciente de tu coach
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-300">{lastCheckin.coachFeedback}</p>
+                </div>
+              )}
             </SectionCard>
           ) : (
             <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.015] p-5">
@@ -447,7 +524,7 @@ export default function MiPanel() {
                     </div>
                     <div className="rounded-xl bg-white/[0.03] p-3 text-center">
                       <div className="mb-0.5 text-xs text-slate-500">Actual</div>
-                      <div className="font-bold text-emerald-400">{client.weight} kg</div>
+                      <div className="font-bold text-emerald-400">{currentWeight ?? client.weight} kg</div>
                     </div>
                     <div className="rounded-xl bg-accent/10 p-3 text-center">
                       <div className="mb-0.5 text-xs text-slate-500">Objetivo</div>
