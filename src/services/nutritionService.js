@@ -106,3 +106,146 @@ export async function upsertNutritionPlan(clientId, payload) {
 
   return { data, error }
 }
+
+// ===========================================================================
+// FASE C — Cumplimiento del plan + registro de comidas (migración 0003).
+// Tablas: nutrition_compliance (1 fila por cliente/día), nutrition_logs.
+// Las escrituras corren con la sesión del navegador y las autoriza RLS:
+// el asesorado solo puede tocar lo suyo (clients.user_id = auth.uid()).
+// ===========================================================================
+
+// Resuelve el client_id del asesorado autenticado (mismo patrón que
+// workoutLogService.resolveClient y getMyNutritionPlan).
+async function resolveClient() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { client: null, error: new Error('No autenticado') }
+  const { data: client, error } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+  if (error || !client) {
+    return { client: null, error: error || new Error('Perfil no encontrado'), reason: 'no-client' }
+  }
+  return { client, error: null }
+}
+
+// Fecha local en formato YYYY-MM-DD (evita el corrimiento de zona de toISOString).
+function todayLocalDate() {
+  const d = new Date()
+  const off = d.getTimezoneOffset()
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10)
+}
+
+/**
+ * El asesorado marca su cumplimiento del día. Upsert por (client_id, log_date):
+ * volver a marcar el mismo día actualiza el estado en vez de duplicar.
+ * @param {{ status: 'cumplido'|'parcial'|'no_cumplido', note?: string, date?: string }} payload
+ */
+export async function upsertCompliance({ status, note, date }) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Requiere Supabase configurado') }
+  }
+
+  const { client, error, reason } = await resolveClient()
+  if (!client) return { data: null, error: error || new Error('Perfil no encontrado'), reason }
+
+  const { data, error: qErr } = await supabase
+    .from('nutrition_compliance')
+    .upsert(
+      {
+        client_id: client.id,
+        log_date: date || todayLocalDate(),
+        status,
+        note: note?.trim() || null,
+      },
+      { onConflict: 'client_id,log_date' },
+    )
+    .select()
+    .single()
+
+  return { data, error: qErr }
+}
+
+/**
+ * Historial de cumplimiento del asesorado autenticado (más reciente primero).
+ */
+export async function getMyCompliance(limit = 14) {
+  if (!isSupabaseConfigured) return { data: [], error: null, source: 'mock' }
+
+  const { client, error } = await resolveClient()
+  if (!client) return { data: [], error, source: 'supabase' }
+
+  return getCompliance(client.id, limit)
+}
+
+/**
+ * Historial de cumplimiento de un cliente (para la vista del coach).
+ */
+export async function getCompliance(clientId, limit = 14) {
+  if (!isSupabaseConfigured) return { data: [], error: null, source: 'mock' }
+
+  const { data, error } = await supabase
+    .from('nutrition_compliance')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('log_date', { ascending: false })
+    .limit(limit)
+
+  return { data: error ? [] : (data ?? []), error, source: 'supabase' }
+}
+
+/**
+ * El asesorado registra una comida (texto libre). Devuelve la fila creada.
+ * @param {{ description: string, mealLabel?: string, calories?: number|null, protein?: number|null }} payload
+ */
+export async function addFoodLog({ description, mealLabel, calories, protein }) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Requiere Supabase configurado') }
+  }
+
+  const { client, error, reason } = await resolveClient()
+  if (!client) return { data: null, error: error || new Error('Perfil no encontrado'), reason }
+
+  const { data, error: qErr } = await supabase
+    .from('nutrition_logs')
+    .insert({
+      client_id: client.id,
+      description: description.trim(),
+      meal_label: mealLabel?.trim() || null,
+      calories: calories ?? null,
+      protein: protein ?? null,
+    })
+    .select()
+    .single()
+
+  return { data, error: qErr }
+}
+
+/**
+ * Comidas registradas por el asesorado autenticado (más recientes primero).
+ */
+export async function getMyFoodLogs(limit = 20) {
+  if (!isSupabaseConfigured) return { data: [], error: null, source: 'mock' }
+
+  const { client, error } = await resolveClient()
+  if (!client) return { data: [], error, source: 'supabase' }
+
+  return getFoodLogs(client.id, limit)
+}
+
+/**
+ * Comidas registradas por un cliente (para la vista del coach).
+ */
+export async function getFoodLogs(clientId, limit = 20) {
+  if (!isSupabaseConfigured) return { data: [], error: null, source: 'mock' }
+
+  const { data, error } = await supabase
+    .from('nutrition_logs')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('logged_at', { ascending: false })
+    .limit(limit)
+
+  return { data: error ? [] : (data ?? []), error, source: 'supabase' }
+}
