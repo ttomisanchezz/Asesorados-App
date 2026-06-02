@@ -105,26 +105,18 @@ function CoachFoodLogs({ clientId }) {
   return (
     <div className="flex flex-col gap-2">
       {rows.map((log) => (
-        <div key={log.id} className="flex items-start justify-between gap-3 p-3 bg-white/[0.02] rounded-xl">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              {log.meal_label && (
-                <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                  {log.meal_label}
-                </span>
-              )}
-              <span className="text-white text-sm font-medium">{log.description}</span>
-            </div>
-            {log.logged_at && (
-              <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-600">
-                <Clock size={11} /> {new Date(log.logged_at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              </div>
+        <div key={log.id} className="flex flex-col gap-1 p-3 bg-white/[0.02] rounded-xl">
+          <div className="flex flex-wrap items-center gap-2">
+            {log.meal_label && (
+              <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                {log.meal_label}
+              </span>
             )}
+            <span className="text-white text-sm font-medium">{log.description}</span>
           </div>
-          {(log.calories != null || log.protein != null) && (
-            <div className="shrink-0 text-right">
-              {log.calories != null && <div className="text-accent font-semibold text-sm">{log.calories} kcal</div>}
-              {log.protein != null && <div className="text-slate-600 text-[11px]">{log.protein}g prot.</div>}
+          {log.logged_at && (
+            <div className="flex items-center gap-1 text-[11px] text-slate-600">
+              <Clock size={11} /> {new Date(log.logged_at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
         </div>

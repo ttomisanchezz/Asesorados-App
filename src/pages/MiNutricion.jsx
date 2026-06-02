@@ -18,13 +18,6 @@ function todayLocalDate() {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10)
 }
 
-// Parser tolerante para enteros opcionales (kcal, proteína).
-const toInt = (v) => {
-  if (v == null || String(v).trim() === '') return null
-  const n = parseInt(String(v), 10)
-  return Number.isNaN(n) ? null : n
-}
-
 const COMPLIANCE_OPTIONS = [
   {
     value: 'cumplido', label: 'Cumplí', icon: CheckCircle2,
@@ -306,8 +299,6 @@ function FoodLogBlock() {
   const [logs, setLogs] = useState([])
   const [description, setDescription] = useState('')
   const [mealLabel, setMealLabel] = useState('')
-  const [calories, setCalories] = useState('')
-  const [protein, setProtein] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
 
@@ -324,12 +315,7 @@ function FoodLogBlock() {
     }
     setMsg(null)
     setSaving(true)
-    const { data, error, reason } = await addFoodLog({
-      description,
-      mealLabel,
-      calories: toInt(calories),
-      protein: toInt(protein),
-    })
+    const { data, error, reason } = await addFoodLog({ description, mealLabel })
     setSaving(false)
     if (error) {
       setMsg({
@@ -344,8 +330,6 @@ function FoodLogBlock() {
     setLogs((prev) => [data, ...prev])
     setDescription('')
     setMealLabel('')
-    setCalories('')
-    setProtein('')
     setMsg({ type: 'ok', text: 'Comida registrada.' })
   }
 
@@ -361,34 +345,14 @@ function FoodLogBlock() {
           placeholder="¿Qué comiste? Ej: 2 huevos revueltos con palta"
           className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
         />
-        <div className="grid grid-cols-3 gap-2">
-          <input
-            type="text"
-            value={mealLabel}
-            onChange={(e) => setMealLabel(e.target.value)}
-            placeholder="Momento"
-            aria-label="Momento de la comida (opcional)"
-            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
-          />
-          <input
-            type="number"
-            inputMode="numeric"
-            value={calories}
-            onChange={(e) => setCalories(e.target.value)}
-            placeholder="kcal"
-            aria-label="Calorías (opcional)"
-            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
-          />
-          <input
-            type="number"
-            inputMode="numeric"
-            value={protein}
-            onChange={(e) => setProtein(e.target.value)}
-            placeholder="prot. g"
-            aria-label="Proteína en gramos (opcional)"
-            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-center text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
-          />
-        </div>
+        <input
+          type="text"
+          value={mealLabel}
+          onChange={(e) => setMealLabel(e.target.value)}
+          placeholder="Momento (opcional): Desayuno, Colación…"
+          aria-label="Momento de la comida (opcional)"
+          className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
+        />
       </div>
 
       {msg && (
@@ -432,26 +396,18 @@ function FoodLogRow({ log }) {
     ? new Date(log.logged_at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : null
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          {log.meal_label && (
-            <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-              {log.meal_label}
-            </span>
-          )}
-          <span className="text-sm font-medium leading-snug text-white">{log.description}</span>
-        </div>
-        {when && (
-          <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-600">
-            <Clock size={11} /> {when}
-          </div>
+    <div className="flex flex-col gap-1 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        {log.meal_label && (
+          <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+            {log.meal_label}
+          </span>
         )}
+        <span className="text-sm font-medium leading-snug text-white">{log.description}</span>
       </div>
-      {(log.calories != null || log.protein != null) && (
-        <div className="shrink-0 text-right">
-          {log.calories != null && <div className="text-sm font-bold text-accent">{log.calories} kcal</div>}
-          {log.protein != null && <div className="text-[11px] text-slate-500">{log.protein}g prot.</div>}
+      {when && (
+        <div className="flex items-center gap-1 text-[11px] text-slate-600">
+          <Clock size={11} /> {when}
         </div>
       )}
     </div>
