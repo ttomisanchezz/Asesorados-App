@@ -606,7 +606,7 @@ export default function MiPanel() {
             </SectionCard>
           )}
 
-          {/* Seguimiento — Check-ins (card full-width intencional) */}
+          {/* Seguimiento — accesos fijos disponibles para todos los asesorados */}
           <section className="flex flex-col gap-3">
             <h2 className="px-1 text-xs font-semibold uppercase tracking-widest text-slate-500">
               Seguimiento
@@ -621,6 +621,19 @@ export default function MiPanel() {
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold text-white">Check-ins</div>
                 <div className="mt-0.5 text-xs leading-snug text-slate-500">Historial semanal y registro</div>
+              </div>
+              <ChevronRight size={17} className="shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-accent" />
+            </Link>
+            <Link
+              to="/mi-panel/progreso"
+              className="group flex items-center gap-4 rounded-2xl border border-white/[0.06] bg-surface-800 p-5 transition-all hover:-translate-y-0.5 hover:border-accent/25 hover:bg-surface-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/10 transition-colors group-hover:bg-accent/20">
+                <TrendingUp size={20} className="text-accent" strokeWidth={1.75} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-white">Mi progreso</div>
+                <div className="mt-0.5 text-xs leading-snug text-slate-500">Evolución de peso y medidas</div>
               </div>
               <ChevronRight size={17} className="shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-accent" />
             </Link>
