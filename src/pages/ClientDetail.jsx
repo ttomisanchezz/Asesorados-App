@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, User, Target, Dumbbell, Utensils, TrendingUp,
-  ClipboardCheck, Phone, Mail, AlertCircle, Calendar, Edit2
+  ClipboardCheck, Phone, Mail, AlertCircle, Calendar, Edit2,
+  Camera, ImageOff, Clock
 } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import Badge from '../components/ui/Badge'
@@ -11,6 +12,8 @@ import SectionCard from '../components/ui/SectionCard'
 import ProgressBar from '../components/ui/ProgressBar'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { getClientById } from '../services/clientService'
+import { getCompliance, getFoodLogs } from '../services/nutritionService'
+import { getClientCheckinPhotos } from '../services/photoService'
 
 const TABS = [
   { id: 'summary', label: 'Resumen', icon: User },
@@ -19,6 +22,14 @@ const TABS = [
   { id: 'checkins', label: 'Check-ins', icon: ClipboardCheck },
   { id: 'progress', label: 'Progreso', icon: TrendingUp },
 ]
+
+const COMPLIANCE_BADGE = {
+  cumplido: { label: 'Cumplió', cls: 'bg-emerald-500/10 text-emerald-400' },
+  parcial: { label: 'Parcial', cls: 'bg-amber-500/10 text-amber-400' },
+  no_cumplido: { label: 'No cumplió', cls: 'bg-rose-500/10 text-rose-400' },
+}
+
+const POSE_LABEL = { frente: 'Frente', perfil: 'Perfil', espalda: 'Espalda' }
 
 function RatingDots({ value, max = 5 }) {
   return (
@@ -29,6 +40,144 @@ function RatingDots({ value, max = 5 }) {
           className={`w-2 h-2 rounded-full ${i < value ? 'bg-accent' : 'bg-white/10'}`}
         />
       ))}
+    </div>
+  )
+}
+
+// ── Coach: historial de cumplimiento del plan del asesorado ───────────────────
+function CoachComplianceList({ clientId }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    getCompliance(clientId, 14)
+      .then(({ data }) => { if (active) setRows(data ?? []) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [clientId])
+
+  if (loading) return <div className="py-4 text-center text-sm text-slate-500">Cargando…</div>
+  if (rows.length === 0) {
+    return <div className="py-4 text-center text-sm text-slate-500">El asesorado todavía no registró cumplimiento.</div>
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rows.map((r) => {
+        const b = COMPLIANCE_BADGE[r.status] || { label: r.status, cls: 'bg-white/10 text-slate-400' }
+        return (
+          <div key={r.id} className="flex items-start justify-between gap-3 p-3 bg-white/[0.02] rounded-xl">
+            <div className="min-w-0">
+              <div className="text-white text-sm font-medium">
+                {r.log_date ? new Date(r.log_date + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'}
+              </div>
+              {r.note && <div className="text-slate-500 text-xs mt-0.5">{r.note}</div>}
+            </div>
+            <span className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${b.cls}`}>
+              {b.label}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Coach: comidas registradas por el asesorado ───────────────────────────────
+function CoachFoodLogs({ clientId }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    getFoodLogs(clientId, 20)
+      .then(({ data }) => { if (active) setRows(data ?? []) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [clientId])
+
+  if (loading) return <div className="py-4 text-center text-sm text-slate-500">Cargando…</div>
+  if (rows.length === 0) {
+    return <div className="py-4 text-center text-sm text-slate-500">El asesorado todavía no registró comidas.</div>
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {rows.map((log) => (
+        <div key={log.id} className="flex items-start justify-between gap-3 p-3 bg-white/[0.02] rounded-xl">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              {log.meal_label && (
+                <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                  {log.meal_label}
+                </span>
+              )}
+              <span className="text-white text-sm font-medium">{log.description}</span>
+            </div>
+            {log.logged_at && (
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-600">
+                <Clock size={11} /> {new Date(log.logged_at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
+          </div>
+          {(log.calories != null || log.protein != null) && (
+            <div className="shrink-0 text-right">
+              {log.calories != null && <div className="text-accent font-semibold text-sm">{log.calories} kcal</div>}
+              {log.protein != null && <div className="text-slate-600 text-[11px]">{log.protein}g prot.</div>}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Coach: galería de fotos de progreso (solo lectura) ────────────────────────
+function CoachPhotoGallery({ clientId }) {
+  const [photos, setPhotos] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    getClientCheckinPhotos(clientId)
+      .then(({ data }) => { if (active) setPhotos(data ?? []) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [clientId])
+
+  if (loading) return <div className="py-4 text-center text-sm text-slate-500">Cargando fotos…</div>
+  if (photos.length === 0) {
+    return <div className="py-4 text-center text-sm text-slate-500">El asesorado todavía no subió fotos de progreso.</div>
+  }
+
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+      {photos.map((p) => {
+        const poseLabel = POSE_LABEL[p.pose]
+        return (
+          <a
+            key={p.id}
+            href={p.url || undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="group relative aspect-square overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]"
+          >
+            {p.url ? (
+              <img src={p.url} alt={poseLabel || 'Foto de progreso'} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-slate-600">
+                <ImageOff size={20} />
+              </div>
+            )}
+            {poseLabel && (
+              <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+                {poseLabel}
+              </span>
+            )}
+          </a>
+        )
+      })}
     </div>
   )
 }
@@ -229,44 +378,58 @@ export default function ClientDetail() {
       )}
 
       {activeTab === 'nutrition' && (
-        <div className="grid lg:grid-cols-3 gap-4">
-          <SectionCard title="Objetivo calórico" className="lg:col-span-1">
-            <div className="text-center py-2">
-              <div className="text-4xl font-bold text-white mb-1">{client.nutrition.calories}</div>
-              <div className="text-slate-500 text-sm">kcal / día</div>
-            </div>
-            <div className="flex flex-col gap-3 mt-4">
-              <ProgressBar label={`Proteína ${client.nutrition.protein}g`} value={client.nutrition.protein} max={250} color="accent" />
-              <ProgressBar label={`Carbohidratos ${client.nutrition.carbs}g`} value={client.nutrition.carbs} max={400} color="sky" />
-              <ProgressBar label={`Grasas ${client.nutrition.fat}g`} value={client.nutrition.fat} max={120} color="amber" />
-            </div>
-            <div className="mt-4 text-xs text-slate-500 text-center">
-              Última actualización: {new Date(client.nutrition.lastUpdate).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Plan de comidas" className="lg:col-span-2">
-            <div className="flex flex-col gap-3">
-              {client.nutrition.meals.map((meal, i) => (
-                <div key={i} className="flex items-start justify-between gap-3 p-3 bg-white/[0.02] rounded-xl hover:bg-white/[0.04] transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-white text-sm font-medium">{meal.name}</div>
-                    <div className="text-slate-500 text-xs mt-0.5">{meal.description}</div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-accent font-semibold text-sm">{meal.calories}</div>
-                    <div className="text-slate-600 text-xs">kcal</div>
-                  </div>
+        <div className="flex flex-col gap-4">
+          {client.nutrition && (
+            <div className="grid lg:grid-cols-3 gap-4">
+              <SectionCard title="Objetivo calórico" className="lg:col-span-1">
+                <div className="text-center py-2">
+                  <div className="text-4xl font-bold text-white mb-1">{client.nutrition.calories}</div>
+                  <div className="text-slate-500 text-sm">kcal / día</div>
                 </div>
-              ))}
+                <div className="flex flex-col gap-3 mt-4">
+                  <ProgressBar label={`Proteína ${client.nutrition.protein}g`} value={client.nutrition.protein} max={250} color="accent" />
+                  <ProgressBar label={`Carbohidratos ${client.nutrition.carbs}g`} value={client.nutrition.carbs} max={400} color="sky" />
+                  <ProgressBar label={`Grasas ${client.nutrition.fat}g`} value={client.nutrition.fat} max={120} color="amber" />
+                </div>
+                <div className="mt-4 text-xs text-slate-500 text-center">
+                  Última actualización: {new Date(client.nutrition.lastUpdate).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Plan de comidas" className="lg:col-span-2">
+                <div className="flex flex-col gap-3">
+                  {client.nutrition.meals.map((meal, i) => (
+                    <div key={i} className="flex items-start justify-between gap-3 p-3 bg-white/[0.02] rounded-xl hover:bg-white/[0.04] transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white text-sm font-medium">{meal.name}</div>
+                        <div className="text-slate-500 text-xs mt-0.5">{meal.description}</div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-accent font-semibold text-sm">{meal.calories}</div>
+                        <div className="text-slate-600 text-xs">kcal</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center justify-between">
+                  <span className="text-slate-500 text-sm">Total</span>
+                  <span className="text-white font-bold text-sm">
+                    {client.nutrition.meals.reduce((sum, m) => sum + m.calories, 0)} kcal
+                  </span>
+                </div>
+              </SectionCard>
             </div>
-            <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center justify-between">
-              <span className="text-slate-500 text-sm">Total</span>
-              <span className="text-white font-bold text-sm">
-                {client.nutrition.meals.reduce((sum, m) => sum + m.calories, 0)} kcal
-              </span>
-            </div>
-          </SectionCard>
+          )}
+
+          {/* Registro del asesorado: cumplimiento del plan + comidas */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            <SectionCard title="Cumplimiento del plan" subtitle="Últimos 14 días">
+              <CoachComplianceList clientId={client.id} />
+            </SectionCard>
+            <SectionCard title="Comidas registradas" subtitle="Lo que cargó el asesorado">
+              <CoachFoodLogs clientId={client.id} />
+            </SectionCard>
+          </div>
         </div>
       )}
 
@@ -331,10 +494,8 @@ export default function ClientDetail() {
             </p>
             <Button icon={ClipboardCheck}>Cargar nuevo check-in</Button>
           </div>
-          <SectionCard title="Historial de check-ins" subtitle="Últimas semanas">
-            <div className="text-slate-500 text-sm py-4 text-center">
-              Próximamente: historial completo de check-ins con gráficos.
-            </div>
+          <SectionCard title="Fotos de progreso" subtitle="Subidas por el asesorado" action={<Camera size={16} className="text-slate-500" />}>
+            <CoachPhotoGallery clientId={client.id} />
           </SectionCard>
         </div>
       )}
