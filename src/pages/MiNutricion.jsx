@@ -37,14 +37,18 @@ const COMPLIANCE_OPTIONS = [
 ]
 
 // ── Tile de macro (calorías, proteínas, etc.) ────────────────────────────────
+// Si el coach todavía no cargó el macro (null), mostramos "— unidad" en gris en
+// vez de dejar el número vacío. No inventamos valores.
 function MacroTile({ label, value, unit, color }) {
+  const hasValue = value !== null && value !== undefined && value !== ''
   return (
     <div className="flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-surface-800 p-4">
       <span className="text-xs text-slate-500">{label}</span>
-      <span className={`text-2xl font-bold leading-tight ${color}`}>
-        {value}
+      <span className={`text-2xl font-bold leading-tight ${hasValue ? color : 'text-slate-600'}`}>
+        {hasValue ? value : '—'}
         <span className="ml-0.5 text-sm font-normal text-slate-500">{unit}</span>
       </span>
+      {!hasValue && <span className="text-[11px] text-slate-600">Sin cargar</span>}
     </div>
   )
 }

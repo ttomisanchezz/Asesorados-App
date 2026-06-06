@@ -28,6 +28,11 @@ function startOfWeek(d = new Date()) {
 const fmtShortDate = (iso) =>
   new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 
+// Macro cargado → "90g"; sin cargar (null) → "— g" en gris. Nunca inventa valores.
+const hasMacro = (v) => v !== null && v !== undefined && v !== ''
+const macroValue = (v, unit = 'g') => (hasMacro(v) ? `${v}${unit}` : `— ${unit}`.trim())
+const macroClass = (v) => `mt-0.5 font-semibold ${hasMacro(v) ? 'text-white' : 'text-slate-500'}`
+
 // ── Header del panel ─────────────────────────────────────────────────────────
 // Declarado a nivel de módulo (no dentro del render) para no recrear el
 // componente en cada render y conservar el estado de sus hijos.
@@ -390,19 +395,20 @@ export default function MiPanel() {
                 </Link>
               }
             >
-              {/* Resumen de macros — el detalle de comidas vive en /mi-panel/nutricion */}
+              {/* Resumen de macros — el detalle de comidas vive en /mi-panel/nutricion.
+                  Si un macro no está cargado mostramos "— g" en gris (no inventamos valores). */}
               <div className="flex items-center justify-between rounded-xl border border-accent/10 bg-accent/[0.06] p-4">
                 <div className="flex items-center gap-3">
                   <Utensils size={20} className="text-accent" strokeWidth={1.75} />
                   <div>
-                    <div className="text-xl font-bold text-white">{nutrition.calories}</div>
+                    <div className="text-xl font-bold text-white">{macroValue(nutrition.calories, '')}</div>
                     <div className="text-xs text-slate-500">kcal objetivo</div>
                   </div>
                 </div>
                 <div className="flex gap-4 text-right text-xs text-slate-500">
-                  <div>P<div className="mt-0.5 font-semibold text-white">{nutrition.protein}g</div></div>
-                  <div>C<div className="mt-0.5 font-semibold text-white">{nutrition.carbs}g</div></div>
-                  <div>G<div className="mt-0.5 font-semibold text-white">{nutrition.fat}g</div></div>
+                  <div>P<div className={macroClass(nutrition.protein)}>{macroValue(nutrition.protein)}</div></div>
+                  <div>C<div className={macroClass(nutrition.carbs)}>{macroValue(nutrition.carbs)}</div></div>
+                  <div>G<div className={macroClass(nutrition.fat)}>{macroValue(nutrition.fat)}</div></div>
                 </div>
               </div>
             </SectionCard>
