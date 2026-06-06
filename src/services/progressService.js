@@ -24,8 +24,8 @@ function normalizeProgress(data) {
     count: ordered.length,
     weightHistory: withWeight.map((r) => Number(r.weight)),
     dates: withWeight.map((r) => label(r.created_at)),
-    // points: serie limpia para el gráfico/estadísticas
-    points: withWeight.map((r) => ({ weight: Number(r.weight), iso: r.created_at })),
+    // points: serie limpia para el gráfico/estadísticas (incluye id para poder editar por registro)
+    points: withWeight.map((r) => ({ id: r.id, weight: Number(r.weight), iso: r.created_at, notes: r.notes ?? null })),
     measurements: {
       waist: latest.waist ?? null,
       chest: latest.chest ?? null,
@@ -150,6 +150,37 @@ export async function addMyProgressEntry({ weight, date, notes }) {
   // clients.weight (peso denormalizado) lo sincroniza el trigger
   // sync_client_weight en la DB de forma segura — no hace falta tocarlo desde acá.
   return { data: result.data, error: null, updated: updating }
+}
+
+/**
+ * El asesorado autenticado corrige el peso de UN registro existente (por id).
+ *
+ * Se usa para enmendar cargas erróneas (ej. 242 kg) sin crear un duplicado:
+ * hace UPDATE sobre la misma fila de progress_metrics. La autorización la da
+ * RLS (policy "progress: asesorado actualiza el suyo"): solo puede tocar filas
+ * de un client cuyo user_id = auth.uid(). No usa service_role.
+ *
+ * @param {{ id:string, weight:number, notes?:string }} payload
+ * @returns {{ data, error }}
+ */
+export async function updateMyProgressWeight({ id, weight, notes }) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Requiere Supabase configurado') }
+  }
+  if (!id) return { data: null, error: new Error('Falta el id del registro') }
+
+  const patch = { weight }
+  if (notes !== undefined) patch.notes = notes?.trim() || null
+
+  const { data, error } = await supabase
+    .from('progress_metrics')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+
+  // El trigger sync_client_weight mantiene clients.weight = último peso real.
+  return { data, error }
 }
 
 /**

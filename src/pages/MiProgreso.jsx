@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  TrendingUp, TrendingDown, Minus, AlertCircle, Plus, Check, Loader2, Scale,
+  TrendingUp, TrendingDown, Minus, AlertCircle, Plus, Check, Loader2, Scale, Pencil, X,
 } from 'lucide-react'
 import { getMyClientProfile } from '../services/clientService'
-import { getMyProgress, addMyProgressEntry } from '../services/progressService'
+import { getMyProgress, addMyProgressEntry, updateMyProgressWeight } from '../services/progressService'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
@@ -53,30 +53,120 @@ function WeightChart({ points }) {
   )
 }
 
-// ── Historial de registros (lista descendente por fecha) ────────────────────
-function HistoryCard({ points }) {
+// ── Historial de registros (lista descendente por fecha, editable) ──────────
+function HistoryCard({ points, onSaved }) {
   const [showAll, setShowAll] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [value, setValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
   // points viene ascendente; la lista la mostramos del más reciente al más antiguo.
   const desc = [...points].reverse()
   const visible = showAll ? desc : desc.slice(0, 6)
+
+  function startEdit(p) {
+    setEditingId(p.id)
+    setValue(String(p.weight))
+    setError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setValue('')
+    setError(null)
+  }
+
+  async function saveEdit(p) {
+    setError(null)
+    // Acepta coma o punto: "72,50" → 72.5 ; "71.900" → 71.9
+    const w = parseFloat(String(value).trim().replace(',', '.'))
+    if (value.trim() === '' || Number.isNaN(w)) return setError('Ingresá un peso válido.')
+    if (w <= 0) return setError('El peso debe ser un número positivo.')
+    if (w < 30 || w > 250) return setError('El peso debe estar entre 30 y 250 kg.')
+
+    setSaving(true)
+    const { error: err } = await updateMyProgressWeight({ id: p.id, weight: Math.round(w * 100) / 100 })
+    setSaving(false)
+
+    if (err) {
+      const denied = err.code === '42501' || /row-level security|permission|policy/i.test(err.message || '')
+      setError(denied ? 'No se pudo guardar por permisos. Avisale a tu coach.' : (err.message || 'No se pudo guardar.'))
+      return
+    }
+    cancelEdit()
+    onSaved?.()
+  }
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-surface-800 p-5">
       <div className="mb-3">
         <div className="text-sm font-semibold text-white">Historial de registros</div>
-        <div className="mt-0.5 text-xs text-slate-500">Peso registrado por fecha</div>
+        <div className="mt-0.5 text-xs text-slate-500">Tocá el lápiz para corregir un peso mal cargado</div>
       </div>
 
       <div className={showAll ? 'max-h-80 overflow-y-auto pr-1' : ''}>
-        {visible.map((p, i) => (
-          <div
-            key={`${p.iso}-${i}`}
-            className="flex items-center justify-between border-b border-white/[0.04] py-2.5 last:border-0"
-          >
-            <span className="text-sm text-slate-400">{fmtDate(p.iso)}</span>
-            <span className="text-sm font-semibold tabular-nums text-white">{p.weight} kg</span>
-          </div>
-        ))}
+        {visible.map((p, i) => {
+          const isEditing = editingId === p.id
+          return (
+            <div
+              key={p.id ?? `${p.iso}-${i}`}
+              className="flex flex-col gap-2 border-b border-white/[0.04] py-2.5 last:border-0"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-slate-400">{fmtDate(p.iso)}</span>
+
+                {isEditing ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      autoFocus
+                      aria-label="Nuevo peso"
+                      className="w-20 rounded-lg border border-accent/40 bg-white/[0.04] px-2.5 py-1.5 text-right text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    />
+                    <span className="text-xs text-slate-500">kg</span>
+                    <button
+                      onClick={() => saveEdit(p)}
+                      disabled={saving}
+                      aria-label="Guardar peso"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-dark disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                    >
+                      {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      aria-label="Cancelar edición"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] text-slate-400 transition-colors hover:text-white disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold tabular-nums text-white">{p.weight} kg</span>
+                    <button
+                      onClick={() => startEdit(p)}
+                      aria-label={`Editar registro del ${fmtDate(p.iso)}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {isEditing && error && (
+                <div className="flex items-center gap-1.5 text-xs text-rose-300">
+                  <AlertCircle size={12} className="shrink-0" /> {error}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {desc.length > 6 && (
@@ -372,8 +462,8 @@ export default function MiProgreso() {
             </div>
           )}
 
-          {/* Historial de registros (lista descendente) */}
-          {hasHistory && <HistoryCard points={pts} />}
+          {/* Historial de registros (lista descendente, editable) */}
+          {hasHistory && <HistoryCard points={pts} onSaved={loadData} />}
 
           {/* Cargar nuevo peso */}
           <WeightForm onSaved={loadData} />
