@@ -93,7 +93,10 @@ function parseMacros(tables) {
   // 1) Tabla de 3 columnas: Variable | Cálculo | Resultado/Objetivo diario.
   for (const t of tables) {
     const h = (t.rows[0] || []).map(norm)
-    const isMacroTable = h.includes('calculo') || h.includes('resultado') || h.join(' ').includes('objetivo diario')
+    // Acepta "Variable | Cálculo | Resultado/Objetivo diario" (eze/giselle/mateo/tomi/ro)
+    // y "Variable | Objetivo actualizado" (santi). Todas arrancan con "Variable".
+    const isMacroTable = h[0] === 'variable'
+      || h.includes('calculo') || h.includes('resultado') || h.join(' ').includes('objetivo diario')
     if (!isMacroTable) continue
     const res = { protein: null, carbs: null, fats: null }
     for (const row of t.rows.slice(1)) {
@@ -249,6 +252,85 @@ function parseMeals(blocks) {
     .filter((s) => s.meals.length)
 }
 
+// ── Variante por DÍA de la semana (santi): cada día es un esquema ────────────
+// Mismo armado de opciones que parseMeals (Layout A/B), pero los esquemas salen
+// de los encabezados de día (LUNES:, MARTES:, …) en vez de "Días de entrenamiento".
+// parseMeals queda intacto para no tocar a los asesorados que ya funcionan.
+const DAY_RE = /^(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/i
+// Etiqueta de comida anclada al inicio: "Merienda - Opción 2: avena…" cuenta como
+// encabezado aunque sea largo; una prosa que solo menciona "desayuno" en el medio no.
+const MEAL_START_RE = /^(desayuno|almuerzo|merienda|cena|colaci[oó]n|pre.?entreno|post.?entreno|pre entreno|post entreno)/i
+
+function parseWeeklyMeals(blocks) {
+  const schemes = []
+  let curScheme = null
+  let lastMealLabel = null
+
+  const getMeal = (scheme, name) => {
+    let m = scheme.meals.find((x) => norm(x.name) === norm(name))
+    if (!m) { m = { name, options: [] }; scheme.meals.push(m) }
+    return m
+  }
+
+  for (const b of blocks) {
+    if (b.type === 'p') {
+      const t = b.text.trim()
+      const dm = t.match(DAY_RE)
+      if (dm) {
+        // "LUNES: trabajo + entrenamiento" → scheme "Lunes", description el contexto.
+        const dayName = dm[0].charAt(0).toUpperCase() + dm[0].slice(1).toLowerCase()
+        const desc = t.includes(':') ? t.split(':').slice(1).join(':').trim() : ''
+        curScheme = { scheme: dayName, description: desc, meals: [] }
+        schemes.push(curScheme)
+      } else if (MEAL_START_RE.test(t)) {
+        lastMealLabel = t
+      }
+      continue
+    }
+    if (!curScheme || !isMealTable(b.rows)) continue
+    const cols = macroColumns(b.rows[0])
+    const layoutA = norm(b.rows[0][0]).startsWith('opcion')
+    const { meal, optTitle } = labelToMealOption(lastMealLabel)
+    const mealObj = getMeal(curScheme, meal)
+
+    if (layoutA) {
+      for (const row of b.rows.slice(1)) {
+        if (!row[1]) continue
+        const items = String(row[1]).split(/\s*\+\s*/).map((s) => s.trim()).filter(Boolean)
+        const num = String(row[0] || '').trim()
+        mealObj.options.push({
+          title: /opci/i.test(num) ? num : `Opción ${num || mealObj.options.length + 1}`,
+          items, kcal: intOf(row[cols.kcal]),
+          macros: { p: intOf(row[cols.p]), c: intOf(row[cols.c]), f: intOf(row[cols.f]) },
+        })
+      }
+    } else {
+      const items = []
+      let total = null
+      for (const row of b.rows.slice(1)) {
+        if (/^total/.test(norm(row[0]))) { total = row; continue }
+        const name = (row[0] || '').trim()
+        if (!name) continue
+        const portion = (row[1] || '').trim()
+        items.push(portion && portion !== '·' ? `${name} — ${portion}` : name)
+      }
+      if (!items.length) continue
+      mealObj.options.push({
+        title: optTitle || `Opción ${mealObj.options.length + 1}`,
+        items,
+        kcal: total ? intOf(total[cols.kcal]) : null,
+        macros: total
+          ? { p: intOf(total[cols.p]), c: intOf(total[cols.c]), f: intOf(total[cols.f]) }
+          : { p: null, c: null, f: null },
+      })
+    }
+  }
+
+  return schemes
+    .map((s) => ({ ...s, meals: s.meals.filter((m) => m.options.length) }))
+    .filter((s) => s.meals.length)
+}
+
 // Prosa larga = párrafo descriptivo, no un encabezado.
 const isLongProse = (t) => t.length > 60
 function cleanSchemeName(t) {
@@ -287,7 +369,10 @@ export function parseDietDocx(buf) {
   const profile = parseProfile(flatTexts(blocks))
   const macros = parseMacros(tables)
   const calories = parseCalories(blocks, tables)
-  const meals = parseMeals(blocks)
+  // Si el plan está organizado por día de la semana (≥3 encabezados de día),
+  // cada día es un esquema; si no, se usa el parser estándar.
+  const dayHeaders = blocks.filter((b) => b.type === 'p' && DAY_RE.test(b.text.trim())).length
+  const meals = dayHeaders >= 3 ? parseWeeklyMeals(blocks) : parseMeals(blocks)
   return {
     calories,
     protein: macros.protein,
