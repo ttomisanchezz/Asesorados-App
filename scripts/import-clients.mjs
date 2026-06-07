@@ -36,6 +36,7 @@ import zlib from 'node:zlib'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
+import { parseDietDocx } from './lib/dietParser.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -270,8 +271,10 @@ async function processClient(sb, key, coachId, errors) {
 
   console.log(`\n${'─'.repeat(64)}\n▶ ${key}  (archivos: ${files.join(', ') || 'ninguno'})`)
 
-  // 1) Perfil desde docx
-  const profile = docxFile ? parseProfile(readDocxParagraphs(fs.readFileSync(path.join(dir, docxFile)))) : {}
+  // 1) Perfil + plan nutricional desde docx (un solo read del archivo)
+  const docxBuf = docxFile ? fs.readFileSync(path.join(dir, docxFile)) : null
+  const profile = docxBuf ? parseProfile(readDocxParagraphs(docxBuf)) : {}
+  const diet = docxBuf ? parseDietDocx(docxBuf) : null
   const fullName = profile.name || cfg.fallbackName
   const objective = profile.objectiveMain || null
   if (cfg.needsRealName) console.log('  ⚠ NOMBRE placeholder (no hay docx con nombre real) — confirmá el nombre de este asesorado.')
@@ -296,15 +299,20 @@ async function processClient(sb, key, coachId, errors) {
     console.log('  ⚠ Sin rutina.xlsx — workout_plan queda vacío.')
   }
 
-  // 3) Nutrición
-  const hasNutrition = profile.kcal != null || profile.protein != null
+  // 3) Nutrición (parser robusto: macros del cuadro "Resultado/Objetivo diario" + comidas reales)
+  const mealsCount = diet?.meals?.reduce((s, sc) => s + sc.meals.reduce((a, m) => a + m.options.length, 0), 0) ?? 0
+  const hasNutrition = !!diet && (diet.calories != null || diet.protein != null || mealsCount > 0)
   if (hasNutrition) {
     console.log('  Nutrición:', JSON.stringify({
-      kcal: profile.kcal ?? null, protein: profile.protein ?? null,
-      carbs: profile.carbs ?? null, fats: profile.fats ?? null,
+      kcal: diet.calories ?? null, protein: diet.protein ?? null,
+      carbs: diet.carbs ?? null, fats: diet.fats ?? null,
+      esquemas: diet.meals.length, opciones: mealsCount,
     }))
+    if (diet.protein == null || diet.carbs == null || diet.fats == null) {
+      console.log('  ⚠ Macros incompletos en el docx — se cargan los que existan, el resto queda null (no se inventa).')
+    }
   } else if (docxFile) {
-    console.log('  ⚠ No se pudo extraer kcal/macros limpios del docx — nutrition_plan queda vacío.')
+    console.log('  ⚠ No se pudo extraer nutrición del docx — nutrition_plan queda vacío.')
   }
 
   // En modo parse-only no se toca la DB: solo se muestra lo extraído.
@@ -386,20 +394,37 @@ async function processClient(sb, key, coachId, errors) {
 
   if (!clientId && !APPLY) clientId = '(se crea al aplicar)'
 
-  // 2) nutrition_plans (no duplicar: si ya hay plan activo, omitir)
+  // 2) nutrition_plans — IDEMPOTENTE: si hay plan activo lo ACTUALIZA con el plan
+  //    parseado (macros + comidas reales); si no, lo crea. Nunca duplica.
+  //    Antes se omitía cuando ya existía: por eso reimportar no rellenaba macros/comidas.
   if (hasNutrition && clientId && clientId !== '(se crea al aplicar)') {
+    const notes = diet.description
+      || [objective ? `Objetivo: ${objective}` : null, profile.objectiveSec ? `Secundario: ${profile.objectiveSec}` : null]
+        .filter(Boolean).join('\n\n')
+    // Solo seteamos macros que existan; no se pisa con null lo que el docx no trae.
+    const fields = { meals: diet.meals ?? [], notes }
+    if (diet.calories != null) fields.calories = diet.calories
+    if (diet.protein != null) fields.protein = diet.protein
+    if (diet.carbs != null) fields.carbs = diet.carbs
+    if (diet.fats != null) fields.fats = diet.fats
+
     const { data: np } = await sb.from('nutrition_plans').select('id').eq('client_id', clientId).eq('active', true).limit(1)
     if (np?.length) {
-      console.log('  DB nutrition_plans: ya tiene plan activo → se omite (no duplica).')
+      console.log(`  DB nutrition_plans: ACTUALIZAR plan activo (id=${shortId(np[0].id)}…) → macros + ${mealsCount} opciones.`)
+      if (APPLY) {
+        const { error } = await sb.from('nutrition_plans').update(fields).eq('id', np[0].id)
+        if (error) {
+          console.log('    ✗ error update nutrition_plans:', error.message)
+          errors.push({ client: key, step: 'nutrition_plans.update', message: error.message })
+        }
+      }
     } else {
-      const notes = [objective ? `Objetivo: ${objective}` : null, profile.objectiveSec ? `Secundario: ${profile.objectiveSec}` : null,
-        'Plan base importado (kcal + macros). Comidas detalladas pendientes.'].filter(Boolean).join(' · ')
-      console.log('  DB nutrition_plans: CREAR (kcal+macros).')
+      console.log(`  DB nutrition_plans: CREAR → macros + ${mealsCount} opciones.`)
       if (APPLY) {
         const { error } = await sb.from('nutrition_plans').insert({
           coach_id: coachId, client_id: clientId, active: true,
-          calories: profile.kcal ?? null, protein: profile.protein ?? null,
-          carbs: profile.carbs ?? null, fats: profile.fats ?? null, meals: [], notes,
+          calories: diet.calories ?? null, protein: diet.protein ?? null,
+          carbs: diet.carbs ?? null, fats: diet.fats ?? null, meals: diet.meals ?? [], notes,
         })
         if (error) {
           console.log('    ✗ error insert nutrition_plans:', error.message)
@@ -532,11 +557,14 @@ async function verifyClient(sb, key) {
   console.log(`  clients: EXISTE  id=${shortId(client.id)}…  "${client.full_name}"  · obj=${client.objective ?? '—'} · ${client.weight ?? '—'}kg/${client.height ?? '—'}cm · ${client.status}`)
 
   const { data: nps } = await sb.from('nutrition_plans')
-    .select('id, calories, protein, carbs, fats, active').eq('client_id', client.id)
+    .select('id, calories, protein, carbs, fats, meals, active').eq('client_id', client.id)
   if (!nps?.length) console.log('  nutrition_plans: 0')
   else {
     const a = nps.find((n) => n.active) || nps[0]
-    console.log(`  nutrition_plans: ${nps.length} (activos: ${nps.filter((n) => n.active).length})  · ${a.calories ?? '—'}kcal  P${a.protein ?? '—'}/C${a.carbs ?? '—'}/G${a.fats ?? '—'}`)
+    const nOpts = Array.isArray(a.meals)
+      ? a.meals.reduce((s, sc) => s + (sc.meals?.reduce((x, m) => x + (m.options?.length || 0), 0) || 0), 0)
+      : 0
+    console.log(`  nutrition_plans: ${nps.length} (activos: ${nps.filter((n) => n.active).length})  · ${a.calories ?? '—'}kcal  P${a.protein ?? '—'}/C${a.carbs ?? '—'}/G${a.fats ?? '—'}  · ${nOpts} opciones de comida`)
   }
 
   const { data: wps } = await sb.from('workout_plans')
