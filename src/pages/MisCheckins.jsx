@@ -21,6 +21,24 @@ const POSES = [
   { value: 'espalda', label: 'Espalda' },
 ]
 
+// Traduce errores técnicos del upload a algo accionable para el asesorado.
+function friendlyUploadError(error, reason) {
+  if (reason === 'no-client') {
+    return 'No encontramos tu perfil de asesorado vinculado. Contactá a tu coach.'
+  }
+  const m = error?.message || ''
+  if (/bucket not found/i.test(m)) {
+    return 'El almacenamiento de fotos no está disponible todavía. Avisale a tu coach.'
+  }
+  if (/payload too large|exceeded the maximum|413/i.test(m)) {
+    return 'La imagen es demasiado grande. Probá con una foto más liviana.'
+  }
+  if (/row-level security|permission|policy/i.test(m)) {
+    return 'No se pudo guardar por permisos. Avisale a tu coach.'
+  }
+  return m || 'No se pudo subir la foto.'
+}
+
 // Escala 1-5 con puntos (solo si hay valor real)
 function ScaleDots({ label, value }) {
   if (value == null) return null
@@ -136,11 +154,22 @@ function PhotoUploadBlock() {
   useEffect(() => { load() }, [load])
 
   async function handleFiles(e) {
-    const files = Array.from(e.target.files ?? [])
-    if (files.length === 0) return
+    const picked = Array.from(e.target.files ?? [])
+    if (inputRef.current) inputRef.current.value = '' // permite resubir el mismo archivo
+    if (picked.length === 0) return
+
+    // Solo imágenes: el picker filtra con accept, pero algunos orígenes lo saltean.
+    const files = picked.filter((f) => f.type?.startsWith('image/'))
+    const skipped = picked.length - files.length
+    if (files.length === 0) {
+      setMsg({ type: 'error', text: 'Elegí archivos de imagen (JPG, PNG, etc.).' })
+      return
+    }
+
     setMsg(null)
     setUploading(true)
 
+    // Cada foto se sube por separado: si una falla, las demás igual entran.
     let ok = 0
     let firstError = null
     for (const file of files) {
@@ -153,21 +182,17 @@ function PhotoUploadBlock() {
     }
 
     setUploading(false)
-    if (inputRef.current) inputRef.current.value = '' // permite resubir el mismo archivo
-
     if (ok > 0) await load()
 
     if (firstError) {
+      const detail = friendlyUploadError(firstError.error, firstError.reason)
       setMsg({
         type: ok > 0 ? 'warn' : 'error',
-        text: firstError.reason === 'no-client'
-          ? 'No encontramos tu perfil de asesorado vinculado. Contactá a tu coach.'
-          : ok > 0
-            ? `Subimos ${ok} foto(s), pero alguna falló: ${firstError.error.message}`
-            : firstError.error.message || 'No se pudo subir la foto.',
+        text: ok > 0 ? `Subimos ${ok} foto(s), pero alguna falló: ${detail}` : detail,
       })
     } else {
-      setMsg({ type: 'ok', text: `${ok} foto(s) subida(s).` })
+      const extra = skipped > 0 ? ` (${skipped} archivo(s) no eran imágenes y se omitieron)` : ''
+      setMsg({ type: 'ok', text: `${ok} foto(s) subida(s).${extra}` })
     }
   }
 
@@ -186,7 +211,7 @@ function PhotoUploadBlock() {
     <div className="flex flex-col gap-4 rounded-2xl border border-white/[0.06] bg-surface-800 px-5 py-5">
       <div>
         <h3 className="text-sm font-semibold text-white">Fotos de progreso</h3>
-        <p className="mt-0.5 text-xs text-slate-500">Subí tus fotos para que tu coach siga tu evolución.</p>
+        <p className="mt-0.5 text-xs text-slate-500">Cargá tus fotos de frente, perfil y espalda para comparar avances semana a semana.</p>
       </div>
 
       {/* Selector de pose (opcional) */}
@@ -275,7 +300,7 @@ export default function MisCheckins() {
 
   return (
     <div className="min-h-[100dvh] bg-surface-900 pb-12">
-      <SubpageHeader title="Check-ins" subtitle="Historial semanal, fotos y registro" />
+      <SubpageHeader title="Check-ins" subtitle="Subí tus fotos de progreso para que tu coach siga tu evolución." />
 
       {loading && <PageLoader label="Cargando tus check-ins..." />}
 
