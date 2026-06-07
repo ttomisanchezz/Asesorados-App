@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Utensils, Zap, AlertCircle, ChevronDown,
+  Utensils, Zap, AlertCircle, ChevronDown, Target,
   CheckCircle2, MinusCircle, CircleSlash, Plus, Check, Loader2, Clock,
 } from 'lucide-react'
 import {
   getMyNutritionPlan, upsertCompliance, getMyCompliance, addFoodLog, getMyFoodLogs,
 } from '../services/nutritionService'
+import { groupLogsByDay } from '../lib/foodLogs'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
@@ -16,6 +17,14 @@ function todayLocalDate() {
   const d = new Date()
   const off = d.getTimezoneOffset()
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10)
+}
+
+// Título de día: "Hoy" / "Ayer" / nombre del día capitalizado.
+function dayTitle(offset, date) {
+  if (offset === 0) return 'Hoy'
+  if (offset === 1) return 'Ayer'
+  const wd = date.toLocaleDateString('es-AR', { weekday: 'long' })
+  return wd.charAt(0).toUpperCase() + wd.slice(1)
 }
 
 const COMPLIANCE_OPTIONS = [
@@ -307,7 +316,8 @@ function FoodLogBlock() {
   const [msg, setMsg] = useState(null)
 
   const load = useCallback(() => {
-    return getMyFoodLogs(20).then(({ data }) => setLogs(data ?? []))
+    // 100 cubre con holgura una semana de comidas para agruparlas por día.
+    return getMyFoodLogs(100).then(({ data }) => setLogs(data ?? []))
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -381,26 +391,30 @@ function FoodLogBlock() {
         {saving ? <><Loader2 size={16} className="animate-spin" /> Guardando…</> : <><Plus size={16} /> Guardar comida</>}
       </button>
 
-      {/* Lista de comidas recientes */}
-      {logs.length > 0 && (
-        <div className="mt-1 flex flex-col gap-2">
-          <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Comidas recientes</h4>
-          {logs.map((log) => (
-            <FoodLogRow key={log.id} log={log} />
-          ))}
-        </div>
-      )}
+      {/* Comidas agrupadas por día — últimos 7 días, cada día desplegable */}
+      <div className="mt-1 flex flex-col gap-2">
+        <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Esta semana</h4>
+        {groupLogsByDay(logs, 7).map((group) => (
+          <DayAccordion key={group.key} group={group} defaultOpen={group.offset === 0} />
+        ))}
+      </div>
     </div>
   )
 }
 
-// ── Fila de comida registrada ────────────────────────────────────────────────
+// ── Fila de comida registrada (dentro del día) — solo la hora ────────────────
 function FoodLogRow({ log }) {
-  const when = log.logged_at
-    ? new Date(log.logged_at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const ts = log.logged_at || log.created_at
+  const when = ts
+    ? new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
     : null
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3.5">
+    <div className="flex items-start gap-2.5">
+      {when && (
+        <span className="mt-0.5 flex shrink-0 items-center gap-1 text-[11px] font-medium tabular-nums text-slate-500">
+          <Clock size={11} /> {when}
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {log.meal_label && (
           <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
@@ -409,9 +423,50 @@ function FoodLogRow({ log }) {
         )}
         <span className="text-sm font-medium leading-snug text-white">{log.description}</span>
       </div>
-      {when && (
-        <div className="flex items-center gap-1 text-[11px] text-slate-600">
-          <Clock size={11} /> {when}
+    </div>
+  )
+}
+
+// ── Día desplegable con sus comidas (acordeón) ───────────────────────────────
+function DayAccordion({ group, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const count = group.logs.length
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      >
+        <span className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold text-white">{dayTitle(group.offset, group.date)}</span>
+          <span className="text-xs text-slate-500">
+            {group.date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
+          </span>
+        </span>
+        <span className="flex items-center gap-2">
+          <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${
+            count > 0 ? 'bg-accent/15 text-accent' : 'bg-white/[0.04] text-slate-600'
+          }`}>
+            {count > 0 ? `${count} ${count === 1 ? 'comida' : 'comidas'}` : 'Sin registros'}
+          </span>
+          <ChevronDown
+            size={16}
+            className={`shrink-0 text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          />
+        </span>
+      </button>
+
+      {open && (
+        <div className="border-t border-white/[0.04] px-4 py-3">
+          {count > 0 ? (
+            <div className="flex flex-col gap-2.5">
+              {group.logs.map((log) => <FoodLogRow key={log.id} log={log} />)}
+            </div>
+          ) : (
+            <p className="py-0.5 text-xs text-slate-600">Sin comidas registradas</p>
+          )}
         </div>
       )}
     </div>
@@ -435,6 +490,16 @@ export default function MiNutricion() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  // Un plan puede existir con datos parciales (kcal cargada pero macros/comidas
+  // pendientes). Lo informamos con claridad en vez de mostrar tiles que parecen
+  // rotos. No se inventa ningún valor: lo que falta, falta.
+  const macrosComplete = plan && plan.protein != null && plan.carbs != null && plan.fat != null
+  const hasMeals = (plan?.meals?.length ?? 0) > 0
+  const isPartial = plan && (!macrosComplete || !hasMeals)
+  const pendingParts = []
+  if (plan && !macrosComplete) pendingParts.push('los macros (proteínas, carbohidratos y grasas)')
+  if (plan && !hasMeals) pendingParts.push('el detalle de comidas')
 
   return (
     <div className="min-h-[100dvh] bg-surface-900 pb-12">
@@ -463,6 +528,11 @@ export default function MiNutricion() {
                     <> · {new Date(plan.lastUpdate).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}</>
                   )}
                 </p>
+                {plan.objective && (
+                  <span className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-accent/[0.1] px-2.5 py-1 text-xs font-medium text-accent">
+                    <Target size={12} /> {plan.objective}
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -471,6 +541,18 @@ export default function MiNutricion() {
                 <MacroTile label="Carbohidratos" value={plan.carbs} unit="g" color="text-amber-400" />
                 <MacroTile label="Grasas" value={plan.fat} unit="g" color="text-sky-400" />
               </div>
+
+              {isPartial && (
+                <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3.5">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-400" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-amber-200">Plan en preparación</p>
+                    <p className="mt-0.5 text-amber-200/80">
+                      Tu coach todavía no cargó {pendingParts.join(' ni ')}. Te mostramos lo que ya está disponible.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {plan.notes && <CoachNote notes={plan.notes} />}
 

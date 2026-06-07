@@ -53,10 +53,10 @@ export async function getMyNutritionPlan() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { data: null, error: new Error('No autenticado'), source: 'supabase' }
 
-  // Primero encontramos el client_id del usuario
+  // Primero encontramos el client_id del usuario (y su objetivo, que vive en clients).
   const { data: clientData, error: clientError } = await supabase
     .from('clients')
-    .select('id')
+    .select('id, objective')
     .eq('user_id', user.id)
     .single()
 
@@ -73,7 +73,9 @@ export async function getMyNutritionPlan() {
     .limit(1)
     .single()
 
-  return { data: error ? null : normalizeNutritionPlan(data), error, source: 'supabase' }
+  // El objetivo se guarda en clients, no en nutrition_plans: lo adjuntamos al plan.
+  const plan = error ? null : { ...normalizeNutritionPlan(data), objective: clientData.objective ?? null }
+  return { data: plan, error, source: 'supabase' }
 }
 
 /**
