@@ -7,6 +7,7 @@ import {
   getMyNutritionPlan, upsertCompliance, getMyCompliance, addFoodLog, getMyFoodLogs,
 } from '../services/nutritionService'
 import { groupLogsByDay } from '../lib/foodLogs'
+import { normalizeMealPlan } from '../lib/mealPlan'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
@@ -135,12 +136,34 @@ function OptionCard({ option }) {
   )
 }
 
-// ── Slot de comida (Desayuno, Almuerzo, …) con sus opciones ─────────────────
-function MealSlot({ meal }) {
+// ── Comida (Desayuno, Almuerzo, …) como acordeón con sus opciones ────────────
+function MealAccordion({ meal, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const count = meal.options?.length ?? 0
   return (
-    <div className="flex flex-col gap-3">
-      <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-400">{meal.name}</h4>
-      {meal.options?.map((opt, i) => <OptionCard key={i} option={opt} />)}
+    <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      >
+        <span className="text-sm font-semibold text-white">{meal.name}</span>
+        <span className="flex items-center gap-2">
+          <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
+            {count} {count === 1 ? 'opción' : 'opciones'}
+          </span>
+          <ChevronDown
+            size={16}
+            className={`shrink-0 text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          />
+        </span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-white/[0.04] px-4 py-4">
+          {meal.options.map((opt, i) => <OptionCard key={i} option={opt} />)}
+        </div>
+      )}
     </div>
   )
 }
@@ -180,10 +203,10 @@ function SchemeSection({ scheme, index, defaultOpen }) {
         />
       </button>
 
-      {/* Contenido colapsable */}
+      {/* Contenido colapsable — cada comida es su propio acordeón */}
       {open && (
-        <div className="border-t border-white/[0.04] flex flex-col gap-6 px-5 py-5">
-          {scheme.meals?.map((meal, i) => <MealSlot key={i} meal={meal} />)}
+        <div className="flex flex-col gap-2.5 border-t border-white/[0.04] px-4 py-4">
+          {scheme.meals?.map((meal, i) => <MealAccordion key={i} meal={meal} />)}
         </div>
       )}
     </div>
@@ -494,8 +517,9 @@ export default function MiNutricion() {
   // Un plan puede existir con datos parciales (kcal cargada pero macros/comidas
   // pendientes). Lo informamos con claridad en vez de mostrar tiles que parecen
   // rotos. No se inventa ningún valor: lo que falta, falta.
+  const mealPlan = plan ? normalizeMealPlan(plan) : null
   const macrosComplete = plan && plan.protein != null && plan.carbs != null && plan.fat != null
-  const hasMeals = (plan?.meals?.length ?? 0) > 0
+  const hasMeals = mealPlan != null && mealPlan.type !== 'empty'
   const isPartial = plan && (!macrosComplete || !hasMeals)
   const pendingParts = []
   if (plan && !macrosComplete) pendingParts.push('los macros (proteínas, carbohidratos y grasas)')
@@ -556,13 +580,40 @@ export default function MiNutricion() {
 
               {plan.notes && <CoachNote notes={plan.notes} />}
 
-              {plan.meals?.length > 0 && (
+              {/* Plan alimentario — desplegable. Soporta simple (por comidas),
+                  semanal (por días) y texto libre. No inventa comidas. */}
+              {mealPlan.type === 'empty' && (
+                <div className="rounded-2xl border border-white/[0.06] bg-surface-800 px-5 py-4">
+                  <p className="text-sm text-slate-400">Tu coach todavía no cargó el detalle de comidas.</p>
+                </div>
+              )}
+
+              {mealPlan.type === 'plain' && (
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-sm font-semibold text-white">Plan alimentario</h2>
+                  <div className="whitespace-pre-line rounded-2xl border border-white/[0.06] bg-surface-800 p-5 text-sm leading-relaxed text-slate-300">
+                    {mealPlan.text}
+                  </div>
+                </div>
+              )}
+
+              {mealPlan.type === 'grouped' && (
                 <div className="flex flex-col gap-4">
                   <h2 className="text-sm font-semibold text-white">
-                    Esquemas de dieta <span className="font-normal text-slate-600">({plan.meals.length})</span>
+                    {mealPlan.weekly ? 'Plan semanal' : 'Esquemas de dieta'}{' '}
+                    <span className="font-normal text-slate-600">({mealPlan.schemes.length})</span>
                   </h2>
-                  {plan.meals.map((scheme, i) => (
+                  {mealPlan.schemes.map((scheme, i) => (
                     <SchemeSection key={i} scheme={scheme} index={i} defaultOpen={i === 0} />
+                  ))}
+                </div>
+              )}
+
+              {mealPlan.type === 'daily' && (
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-sm font-semibold text-white">Plan alimentario</h2>
+                  {mealPlan.schemes[0].meals.map((meal, i) => (
+                    <MealAccordion key={i} meal={meal} defaultOpen={i === 0} />
                   ))}
                 </div>
               )}
