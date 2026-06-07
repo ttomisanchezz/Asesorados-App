@@ -1,13 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  ClipboardCheck, AlertCircle, MessageSquare, Camera, Trash2, Loader2, ImageOff,
+  ClipboardCheck, AlertCircle, MessageSquare, Camera, Trash2, Loader2, ImageOff, ChevronDown,
 } from 'lucide-react'
 import { getMyCheckins } from '../services/checkinService'
 import {
   getMyCheckinPhotos, uploadCheckinPhoto, deleteCheckinPhoto,
 } from '../services/photoService'
+import { groupPhotosByDay } from '../lib/photoGroups'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
+
+// Rótulo de día: "Hoy" / "Ayer" / nombre del día capitalizado.
+function dayLabel(date) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const d = new Date(date); d.setHours(0, 0, 0, 0)
+  const diff = Math.round((today - d) / 86400000)
+  if (diff === 0) return 'Hoy'
+  if (diff === 1) return 'Ayer'
+  const wd = date.toLocaleDateString('es-AR', { weekday: 'long' })
+  return wd.charAt(0).toUpperCase() + wd.slice(1)
+}
 
 const DECISION_LABEL = {
   maintain: { text: 'Mantener', cls: 'bg-emerald-500/10 text-emerald-400' },
@@ -108,9 +120,11 @@ function CheckinCard({ c }) {
   )
 }
 
-// ── Miniatura con botón de borrar ────────────────────────────────────────────
+// ── Miniatura con pose, hora y botón de borrar ──────────────────────────────
 function PhotoThumb({ photo, onDelete, deleting }) {
   const poseLabel = POSES.find((p) => p.value === photo.pose)?.label
+  const ts = photo.created_at || photo.taken_at
+  const when = ts ? new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : null
   return (
     <div className="group relative aspect-square overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
       {photo.url ? (
@@ -125,6 +139,11 @@ function PhotoThumb({ photo, onDelete, deleting }) {
           {poseLabel}
         </span>
       )}
+      {when && (
+        <span className="absolute bottom-1.5 left-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-white backdrop-blur-sm">
+          {when}
+        </span>
+      )}
       <button
         type="button"
         onClick={() => onDelete(photo.id)}
@@ -134,6 +153,47 @@ function PhotoThumb({ photo, onDelete, deleting }) {
       >
         {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
       </button>
+    </div>
+  )
+}
+
+// ── Día desplegable con sus fotos (acordeón) ────────────────────────────────
+function PhotoDayAccordion({ group, defaultOpen, onDelete, deletingId }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const count = group.photos.length
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      >
+        <span className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold text-white">{dayLabel(group.date)}</span>
+          <span className="text-xs text-slate-500">
+            {group.date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
+          </span>
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
+            {count} {count === 1 ? 'foto' : 'fotos'}
+          </span>
+          <ChevronDown
+            size={16}
+            className={`shrink-0 text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          />
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-white/[0.04] px-4 py-4">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {group.photos.map((p) => (
+              <PhotoThumb key={p.id} photo={p} onDelete={onDelete} deleting={deletingId === p.id} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -269,11 +329,17 @@ function PhotoUploadBlock() {
         </div>
       )}
 
-      {/* Galería de miniaturas */}
+      {/* Galería agrupada por día de carga (más reciente primero) */}
       {photos.length > 0 ? (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {photos.map((p) => (
-            <PhotoThumb key={p.id} photo={p} onDelete={handleDelete} deleting={deletingId === p.id} />
+        <div className="flex flex-col gap-2">
+          {groupPhotosByDay(photos).map((group, i) => (
+            <PhotoDayAccordion
+              key={group.key}
+              group={group}
+              defaultOpen={i === 0}
+              onDelete={handleDelete}
+              deletingId={deletingId}
+            />
           ))}
         </div>
       ) : (
