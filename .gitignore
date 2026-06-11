@@ -30,3 +30,4 @@ scripts/*.local.json
 *.njsproj
 *.sln
 *.sw?
+.atl/
