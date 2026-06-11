@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom'
-import { Bell, Zap } from 'lucide-react'
+import { Zap } from 'lucide-react'
 
 const titles = {
   '/dashboard': 'Dashboard',
@@ -24,10 +24,6 @@ export default function Header() {
         </div>
         <span className="text-white font-semibold text-sm">{title}</span>
       </div>
-      <button className="relative p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors">
-        <Bell size={18} />
-        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-accent rounded-full" />
-      </button>
     </header>
   )
 }

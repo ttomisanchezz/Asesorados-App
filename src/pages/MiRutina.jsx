@@ -60,14 +60,16 @@ function ExerciseCard({ exercise, index, last }) {
         <LastReference last={last} />
 
         {hasVideo && (
-          <button
-            type="button"
+          <a
+            href={exercise.videoUrl}
+            target="_blank"
+            rel="noreferrer"
             className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-accent/15 px-2.5 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-accent/25"
             aria-label={`Ver video de ejecución: ${exercise.name}`}
           >
             <Video size={12} />
             Ver video
-          </button>
+          </a>
         )}
       </div>
 

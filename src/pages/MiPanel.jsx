@@ -436,7 +436,10 @@ export default function MiPanel() {
                       const todayIdx = (new Date().getDay() + 6) % 7
                       return ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => {
                         const dayMap = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-                        const active = training.days.includes(dayMap[i])
+                        // days reales son objetos { day, focus, exercises }; los mock, strings.
+                        const active = training.days.some(
+                          (td) => (typeof td === 'string' ? td : td?.day) === dayMap[i],
+                        )
                         const isToday = i === todayIdx
                         return (
                           <div

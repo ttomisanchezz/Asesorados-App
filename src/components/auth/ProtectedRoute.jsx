@@ -36,6 +36,24 @@ export default function ProtectedRoute({ children, requiredRole }) {
     return <Navigate to="/login" replace />
   }
 
+  // Sesión válida pero sin rol en profiles → cuenta a medio configurar.
+  // Sin esto, el redirect a /mi-panel entraría en bucle (la ruta también exige rol).
+  if (requiredRole && !role) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-6">
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
+            <Zap size={20} className="text-amber-400" />
+          </div>
+          <h2 className="text-base font-semibold text-white">Tu cuenta no tiene un perfil asignado</h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
+            Iniciaste sesión correctamente, pero falta configurar tu rol. Contactá a tu coach para que lo resuelva.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   // Rol requerido y no coincide → redirigir según rol real
   if (requiredRole && role !== requiredRole) {
     const fallback = role === 'coach' ? '/dashboard' : '/mi-panel'

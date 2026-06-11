@@ -1,5 +1,8 @@
 export default function ProgressBar({ value, max = 100, color = 'accent', label, showValue = true }) {
-  const pct = Math.min(100, Math.round((value / max) * 100))
+  // value null/undefined o max 0 → barra en 0, nunca NaN en el width.
+  const safeValue = Number(value) || 0
+  const safeMax = Number(max) || 100
+  const pct = Math.max(0, Math.min(100, Math.round((safeValue / safeMax) * 100)))
 
   const colors = {
     accent: 'bg-accent',

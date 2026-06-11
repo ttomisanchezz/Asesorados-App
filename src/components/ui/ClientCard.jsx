@@ -54,11 +54,18 @@ export default function ClientCard({ client }) {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5 text-slate-500 text-xs">
             <Calendar size={12} />
-            <span>Último check-in: {new Date(client.lastCheckin).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
+            <span>
+              {client.lastCheckin
+                ? `Último check-in: ${new Date(client.lastCheckin).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}`
+                : 'Sin check-ins todavía'}
+            </span>
           </div>
           <div className="flex items-center gap-1.5 text-slate-500 text-xs">
             <TrendingUp size={12} />
-            <span>{client.weight} kg · {client.objective}</span>
+            <span>
+              {[client.weight != null ? `${client.weight} kg` : null, client.objective || null]
+                .filter(Boolean).join(' · ') || 'Sin datos de peso'}
+            </span>
           </div>
         </div>
         <div className="text-accent opacity-0 group-hover:opacity-100 transition-opacity">

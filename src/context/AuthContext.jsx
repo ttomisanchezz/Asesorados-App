@@ -16,14 +16,28 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [user, setUser]       = useState(null)
   const [role, setRole]       = useState(null)   // 'coach' | 'client' | null
-  const [loading, setLoading] = useState(true)
+  // En modo demo (sin Supabase) no hay nada que cargar.
+  const [loading, setLoading] = useState(isSupabaseConfigured)
+
+  async function fetchRole(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+      if (error) throw error
+      setRole(data?.role ?? null)
+    } catch {
+      setRole(null)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      // Modo demo — sin auth
-      setLoading(false)
-      return
-    }
+    if (!isSupabaseConfigured) return
 
     // Leer sesión inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -53,23 +67,6 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function fetchRole(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single()
-
-      if (error) throw error
-      setRole(data?.role ?? null)
-    } catch {
-      setRole(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const signIn = async (email, password) => {
     if (!isSupabaseConfigured) {
       return { error: new Error('Supabase no configurado — modo demo activo') }
@@ -92,6 +89,10 @@ export function AuthProvider({ children }) {
   )
 }
 
+// El provider y el hook viven juntos a propósito: separar useAuth en otro
+// archivo solo para satisfacer fast-refresh complica los imports del resto
+// de la app. El costo es que un edit acá recarga la página completa en dev.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth debe usarse dentro de <AuthProvider>')
