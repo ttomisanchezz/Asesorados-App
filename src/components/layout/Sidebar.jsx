@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
@@ -10,6 +10,7 @@ import {
   Zap,
   UserCircle2,
 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -21,7 +22,10 @@ const navItems = [
 ]
 
 export default function Sidebar() {
-  const location = useLocation()
+  const { user, role } = useAuth()
+  const email = user?.email || ''
+  const name = email ? email.split('@')[0] : 'Coach'
+  const initials = name.slice(0, 2).toUpperCase()
 
   return (
     <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-[#0d0d14] border-r border-white/[0.06] min-h-screen sticky top-0">
@@ -87,14 +91,14 @@ export default function Sidebar() {
           Ajustes
         </NavLink>
 
-        {/* Coach card */}
+        {/* Sesión actual — datos reales */}
         <div className="mt-3 flex items-center gap-3 px-3 py-3 rounded-xl bg-white/[0.03]">
           <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold text-xs">
-            TC
+            {initials}
           </div>
           <div className="min-w-0">
-            <div className="text-white text-xs font-semibold truncate">Tu Coach</div>
-            <div className="text-slate-500 text-xs truncate">Pro Plan</div>
+            <div className="text-white text-xs font-semibold truncate capitalize">{name}</div>
+            <div className="text-slate-500 text-xs truncate">{role === 'coach' ? 'Coach' : email || 'Sesión activa'}</div>
           </div>
         </div>
       </div>
