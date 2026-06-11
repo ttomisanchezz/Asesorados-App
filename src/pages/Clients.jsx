@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Search, UserPlus, Users } from 'lucide-react'
+import { Search, Users } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import PageHeader from '../components/ui/PageHeader'
 import ClientCard from '../components/ui/ClientCard'
-import Button from '../components/ui/Button'
 import EmptyState from '../components/ui/EmptyState'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { getClients } from '../services/clientService'
@@ -44,11 +43,7 @@ export default function Clients() {
       <PageHeader
         title="Asesorados"
         subtitle={loading ? 'Cargando...' : `${activeCount} activos · ${clients.length} total`}
-      >
-        <Button icon={UserPlus} size="sm">
-          Agregar asesorado
-        </Button>
-      </PageHeader>
+      />
 
       {/* Search + Filter */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
