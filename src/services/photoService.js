@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
+import { isHeicFile, heicFileToJpegFile } from '../lib/heicPhoto'
 
 // ---------------------------------------------------------------------------
 // Fotos de progreso del asesorado (check-ins).
@@ -73,12 +74,24 @@ export async function uploadCheckinPhoto(file, { checkinId, pose } = {}) {
   const { client, error, reason } = await resolveClient()
   if (!client) return { data: null, error: error || new Error('Perfil no encontrado'), reason }
 
-  const path = `${client.id}/${uid()}.${fileExt(file)}`
+  // HEIC (iPhone) no se puede mostrar en <img> en Chrome/Firefox: convertimos
+  // a JPEG antes de subir. Si la conversión falla, sube el original y la vista
+  // lo convierte al mostrar (useCheckinPhotoUrl).
+  let upload = file
+  if (isHeicFile(file)) {
+    try {
+      upload = await heicFileToJpegFile(file)
+    } catch {
+      upload = file
+    }
+  }
+
+  const path = `${client.id}/${uid()}.${fileExt(upload)}`
 
   // 1) Subir el archivo al bucket privado.
   const { error: upErr } = await supabase.storage
     .from(BUCKET)
-    .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined })
+    .upload(path, upload, { cacheControl: '3600', upsert: false, contentType: upload.type || undefined })
 
   if (upErr) return { data: null, error: upErr }
 

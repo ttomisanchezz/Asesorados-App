@@ -48,6 +48,23 @@ describe('clientService.normalizeClient (vía getClients)', () => {
     expect(data).toBeNull()
     expect(error).toEqual({ message: 'boom' })
   })
+
+  it('pisa la adherencia estática con la calculada desde los registros de la semana', async () => {
+    state.sb = makeSupabase({
+      tables: {
+        clients: { data: [snakeRow], error: null },
+        workout_sessions: { data: [{ client_id: 'c1' }], error: null },
+        workout_plans: { data: [{ client_id: 'c1', days: [{}, {}, {}, {}, {}] }], error: null },
+        nutrition_compliance: { data: [{ client_id: 'c1', status: 'cumplido' }], error: null },
+        checkins: { data: [], error: null },
+      },
+    })
+    const { data } = await getClients()
+    const c = data[0]
+    expect(c.adherenceTraining).toBe(20) // 1 sesión / 5 días de plan
+    expect(c.adherenceNutrition).toBe(100) // 1 día cumplido
+    expect(c.weeklyTraining).toEqual({ done: 1, planned: 5 })
+  })
 })
 
 describe('getMyClientProfile', () => {

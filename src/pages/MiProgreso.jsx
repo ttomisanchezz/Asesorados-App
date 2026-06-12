@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  TrendingUp, TrendingDown, Minus, AlertCircle, Plus, Check, Loader2, Scale, Pencil, X,
+  TrendingUp, TrendingDown, Minus, AlertCircle, Plus, Check, Loader2, Scale, Pencil, X, Ruler,
 } from 'lucide-react'
 import { getMyClientProfile } from '../services/clientService'
-import { getMyProgress, addMyProgressEntry, updateMyProgressWeight } from '../services/progressService'
+import { getMyProgress, addMyProgressEntry, updateMyProgressWeight, addMyMeasurements } from '../services/progressService'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
@@ -363,6 +363,199 @@ function WeightForm({ onSaved }) {
   )
 }
 
+// ── Módulo "Mediciones": cintura / brazo / pecho con historial ───────────────
+const MEASURE_INPUTS = [
+  { key: 'waist', label: 'Cintura' },
+  { key: 'arm', label: 'Brazo' },
+  { key: 'chest', label: 'Pecho' },
+]
+const MEASURE_LABELS = { waist: 'Cintura', chest: 'Pecho', hip: 'Cadera', arm: 'Brazo', leg: 'Pierna' }
+
+function MeasurementsCard({ progress, onSaved }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [open, setOpen] = useState(false)
+  const [values, setValues] = useState({ waist: '', arm: '', chest: '' })
+  const [date, setDate] = useState(today)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState(null) // { type: 'ok'|'error', text }
+  const [showAll, setShowAll] = useState(false)
+
+  const latest = progress?.measurements ?? {}
+  const latestItems = Object.entries(MEASURE_LABELS)
+    .map(([key, label]) => ({ key, label, value: latest[key] }))
+    .filter((m) => m.value != null)
+  // Historial descendente (measurementPoints viene ascendente por fecha).
+  const history = [...(progress?.measurementPoints ?? [])].reverse()
+  const visible = showAll ? history : history.slice(0, 5)
+
+  async function handleSave() {
+    setMsg(null)
+    const parsed = {}
+    for (const { key, label } of MEASURE_INPUTS) {
+      const raw = String(values[key] ?? '').trim()
+      if (raw === '') continue
+      const n = parseFloat(raw.replace(',', '.'))
+      if (Number.isNaN(n)) return setMsg({ type: 'error', text: `Ingresá un valor válido para ${label.toLowerCase()}.` })
+      if (n < 10 || n > 250) return setMsg({ type: 'error', text: `${label}: el valor debe estar entre 10 y 250 cm.` })
+      parsed[key] = Math.round(n * 10) / 10
+    }
+    if (Object.keys(parsed).length === 0) {
+      return setMsg({ type: 'error', text: 'Cargá al menos una medida.' })
+    }
+    if (!date) return setMsg({ type: 'error', text: 'Elegí una fecha.' })
+
+    setSaving(true)
+    const { error, updated, reason } = await addMyMeasurements({ date, ...parsed })
+    setSaving(false)
+
+    if (error) {
+      if (reason === 'no-client') {
+        setMsg({ type: 'error', text: 'No encontramos tu perfil de asesorado vinculado. Contactá a tu coach.' })
+        return
+      }
+      const denied = error.code === '42501' || /row-level security|permission|policy/i.test(error.message || '')
+      setMsg({
+        type: 'error',
+        text: denied ? 'No se pudo guardar por permisos. Avisale a tu coach.' : (error.message || 'No se pudieron guardar las medidas.'),
+      })
+      return
+    }
+
+    setMsg({ type: 'ok', text: updated ? 'Mediciones actualizadas para esa fecha.' : 'Mediciones guardadas correctamente.' })
+    setValues({ waist: '', arm: '', chest: '' })
+    onSaved?.()
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-white/[0.06] bg-surface-800 p-5">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/10">
+          <Ruler size={17} className="text-accent" strokeWidth={1.75} />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-white">Mediciones</div>
+          <div className="mt-0.5 text-xs text-slate-500">Cintura, brazo y pecho para seguir tu evolución en el tiempo.</div>
+        </div>
+      </div>
+
+      {/* Últimas medidas registradas */}
+      {latestItems.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {latestItems.map((m) => (
+            <div key={m.key} className="rounded-xl bg-white/[0.02] p-3 text-center">
+              <div className="mb-0.5 text-xs text-slate-500">{m.label}</div>
+              <div className="font-bold text-white">{m.value} cm</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Formulario de carga */}
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center justify-center gap-2 rounded-xl border border-accent/25 bg-accent/[0.08] py-3 text-sm font-semibold text-accent transition-all hover:bg-accent/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        >
+          <Plus size={16} /> Cargar mediciones
+        </button>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-3 gap-2">
+            {MEASURE_INPUTS.map(({ key, label }) => (
+              <div key={key} className="flex flex-col gap-1.5">
+                <label htmlFor={`med-${key}`} className="text-xs text-slate-500">{label} (cm)</label>
+                <input
+                  id={`med-${key}`}
+                  type="number"
+                  inputMode="decimal"
+                  step="0.5"
+                  min="10"
+                  max="250"
+                  value={values[key]}
+                  onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+                  placeholder="—"
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-base font-semibold text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="med-fecha" className="text-xs text-slate-500">Fecha</label>
+            <input
+              id="med-fecha"
+              type="date"
+              value={date}
+              max={today}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none transition-colors focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40 [color-scheme:dark]"
+            />
+          </div>
+
+          {msg && (
+            <div
+              className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm ${
+                msg.type === 'ok'
+                  ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300'
+                  : 'border-rose-500/20 bg-rose-500/[0.06] text-rose-300'
+              }`}
+            >
+              {msg.type === 'ok' ? <Check size={15} className="shrink-0" /> : <AlertCircle size={15} className="shrink-0" />}
+              {msg.text}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-glow transition-all hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              {saving ? <><Loader2 size={16} className="animate-spin" /> Guardando…</> : 'Guardar mediciones'}
+            </button>
+            <button
+              onClick={() => { setOpen(false); setMsg(null) }}
+              disabled={saving}
+              className="rounded-xl border border-white/[0.08] px-4 py-3 text-sm text-slate-400 transition-colors hover:text-white disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Historial de mediciones */}
+      {history.length > 0 && (
+        <div>
+          <div className="mb-1 text-xs font-medium text-slate-500">Historial</div>
+          <div className={showAll ? 'max-h-72 overflow-y-auto pr-1' : ''}>
+            {visible.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 border-b border-white/[0.04] py-2.5 last:border-0">
+                <span className="shrink-0 text-sm text-slate-400">{fmtDate(p.iso)}</span>
+                <span className="text-right text-sm font-medium text-white">
+                  {Object.entries(MEASURE_LABELS)
+                    .filter(([key]) => p[key] != null)
+                    .map(([key, label]) => `${label} ${p[key]}`)
+                    .join(' · ')}
+                  <span className="ml-1 text-xs font-normal text-slate-500">cm</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          {history.length > 5 && (
+            <button
+              onClick={() => setShowAll((v) => !v)}
+              className="mt-2 w-full rounded-xl border border-white/[0.06] py-2.5 text-xs font-medium text-accent transition-colors hover:bg-white/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              {showAll ? 'Ver menos' : `Ver todos (${history.length})`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function MiProgreso() {
   const [client, setClient] = useState(null)
   const [progress, setProgress] = useState(null)
@@ -396,8 +589,10 @@ export default function MiProgreso() {
   const maxW = hasHistory ? Math.max(...pts.map((p) => p.weight)) : null
 
   const hasAdherence = client && (client.adherenceNutrition > 0 || client.adherenceTraining > 0)
+  const hasMeasurements = (progress?.measurementPoints?.length ?? 0) > 0
   const hasMetrics =
-    (client && (client.weight || client.targetWeight || client.height || hasAdherence)) || hasHistory
+    (client && (client.weight || client.targetWeight || client.height || hasAdherence)) ||
+    hasHistory || hasMeasurements
 
   return (
     <div className="min-h-[100dvh] bg-surface-900 pb-12">
@@ -417,6 +612,7 @@ export default function MiProgreso() {
             description="Cargá tu primer peso para empezar a ver tu evolución acá."
           />
           <WeightForm onSaved={loadData} />
+          <MeasurementsCard progress={progress} onSaved={loadData} />
           <BackToPanel />
         </div>
       )}
@@ -504,28 +700,8 @@ export default function MiProgreso() {
             </div>
           )}
 
-          {/* Medidas corporales (si el último registro las tiene) */}
-          {progress?.measurements && Object.values(progress.measurements).some((v) => v != null) && (
-            <div className="rounded-2xl border border-white/[0.06] bg-surface-800 p-5">
-              <div className="mb-4 text-sm font-semibold text-white">Últimas medidas</div>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'Cintura', value: progress.measurements.waist },
-                  { label: 'Pecho', value: progress.measurements.chest },
-                  { label: 'Cadera', value: progress.measurements.hip },
-                  { label: 'Brazo', value: progress.measurements.arm },
-                  { label: 'Pierna', value: progress.measurements.leg },
-                ]
-                  .filter((m) => m.value != null)
-                  .map((m) => (
-                    <div key={m.label} className="rounded-xl bg-white/[0.02] p-3 text-center">
-                      <div className="mb-0.5 text-xs text-slate-500">{m.label}</div>
-                      <div className="font-bold text-white">{m.value} cm</div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
+          {/* Mediciones corporales: últimas medidas + carga + historial */}
+          <MeasurementsCard progress={progress} onSaved={loadData} />
 
           {/* Adherencia */}
           {hasAdherence && (

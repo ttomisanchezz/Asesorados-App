@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { mockClients } from '../data/mockClients'
+import { getWeeklyAdherenceMap } from './adherenceService'
 
 // ---------------------------------------------------------------------------
 // Normalización: convierte snake_case de Supabase al formato camelCase del UI.
@@ -45,6 +46,32 @@ function normalizeClient(raw) {
 }
 
 // ---------------------------------------------------------------------------
+// Las columnas adherence_* de clients son estáticas (nadie las recalcula):
+// acá se pisan con la adherencia semanal calculada desde los registros reales
+// (workout_sessions / nutrition_compliance / check-ins). Si el cálculo no tiene
+// datos (o falla), se conserva el valor de la ficha para no romper la vista.
+// ---------------------------------------------------------------------------
+async function withWeeklyAdherence(clients) {
+  const list = (Array.isArray(clients) ? clients : [clients]).filter(Boolean)
+  if (list.length === 0) return clients
+  try {
+    const map = await getWeeklyAdherenceMap(list.map((c) => c.id))
+    for (const c of list) {
+      const adh = map[c.id]
+      if (!adh) continue
+      if (adh.nutrition != null) c.adherenceNutrition = adh.nutrition
+      if (adh.training != null) c.adherenceTraining = adh.training
+      if (adh.trainingDone > 0 || adh.trainingPlanned > 0) {
+        c.weeklyTraining = { done: adh.trainingDone, planned: adh.trainingPlanned }
+      }
+    }
+  } catch {
+    // Sin adherencia calculada: la vista sigue con los valores de la ficha.
+  }
+  return clients
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Retorna la lista de clientes del coach autenticado.
@@ -61,7 +88,7 @@ export async function getClients() {
     .order('full_name', { ascending: true })
 
   return {
-    data: error ? null : (data ?? []).map(normalizeClient),
+    data: error ? null : await withWeeklyAdherence((data ?? []).map(normalizeClient)),
     error,
     source: 'supabase',
   }
@@ -87,7 +114,7 @@ export async function getClientById(id) {
     .single()
 
   return {
-    data: error ? null : normalizeClient(data),
+    data: error ? null : await withWeeklyAdherence(normalizeClient(data)),
     error,
     source: 'supabase',
   }
@@ -113,7 +140,7 @@ export async function getMyClientProfile() {
     .single()
 
   return {
-    data: error ? null : normalizeClient(data),
+    data: error ? null : await withWeeklyAdherence(normalizeClient(data)),
     error,
     source: 'supabase',
   }

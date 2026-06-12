@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, User, Dumbbell, Utensils, TrendingUp,
   ClipboardCheck, Phone, Mail, AlertCircle, Calendar,
-  Camera, ImageOff, Clock, MessageSquare,
+  Camera, ImageOff, Clock, MessageSquare, Loader2, Ruler,
 } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import Badge from '../components/ui/Badge'
@@ -17,6 +17,7 @@ import { getWorkoutPlan } from '../services/workoutService'
 import { getProgressMetrics } from '../services/progressService'
 import { getCheckins } from '../services/checkinService'
 import { getClientCheckinPhotos } from '../services/photoService'
+import { useCheckinPhotoUrl } from '../lib/heicPhoto'
 import { normalizeMealPlan } from '../lib/mealPlan'
 
 const TABS = [
@@ -129,6 +130,39 @@ function CoachFoodLogs({ clientId }) {
   )
 }
 
+// Miniatura de la galería del coach. useCheckinPhotoUrl resuelve también las
+// fotos HEIC (iPhone) que el navegador no puede mostrar de forma nativa.
+function CoachPhotoThumb({ photo }) {
+  const { src, converting } = useCheckinPhotoUrl(photo)
+  const poseLabel = POSE_LABEL[photo.pose]
+  return (
+    <a
+      href={src || undefined}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative aspect-square overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]"
+    >
+      {src ? (
+        <img src={src} alt={poseLabel || 'Foto de progreso'} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-slate-600">
+          {converting ? <Loader2 size={20} className="animate-spin" /> : <ImageOff size={20} />}
+        </div>
+      )}
+      {poseLabel && (
+        <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+          {poseLabel}
+        </span>
+      )}
+      {photo.created_at && (
+        <span className="absolute bottom-1.5 left-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
+          {new Date(photo.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+        </span>
+      )}
+    </a>
+  )
+}
+
 // ── Coach: galería de fotos de progreso (solo lectura) ────────────────────────
 function CoachPhotoGallery({ clientId }) {
   const [photos, setPhotos] = useState([])
@@ -149,36 +183,7 @@ function CoachPhotoGallery({ clientId }) {
 
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-      {photos.map((p) => {
-        const poseLabel = POSE_LABEL[p.pose]
-        return (
-          <a
-            key={p.id}
-            href={p.url || undefined}
-            target="_blank"
-            rel="noreferrer"
-            className="group relative aspect-square overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]"
-          >
-            {p.url ? (
-              <img src={p.url} alt={poseLabel || 'Foto de progreso'} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-slate-600">
-                <ImageOff size={20} />
-              </div>
-            )}
-            {poseLabel && (
-              <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
-                {poseLabel}
-              </span>
-            )}
-            {p.created_at && (
-              <span className="absolute bottom-1.5 left-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
-                {new Date(p.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
-              </span>
-            )}
-          </a>
-        )
-      })}
+      {photos.map((p) => <CoachPhotoThumb key={p.id} photo={p} />)}
     </div>
   )
 }
@@ -467,6 +472,8 @@ function ProgressTab({ client }) {
     { label: 'Brazo', value: measurements.arm },
     { label: 'Pierna', value: measurements.leg },
   ].filter((m) => m.value != null)
+  // Historial de mediciones del más reciente al más antiguo.
+  const measurePoints = [...(progress?.measurementPoints ?? [])].reverse()
 
   if (history.length === 0 && measureItems.length === 0) {
     return (
@@ -516,6 +523,40 @@ function ProgressTab({ client }) {
               <div key={m.label} className="flex items-center justify-between p-3 bg-white/[0.02] rounded-xl">
                 <span className="text-slate-400 text-sm">{m.label}</span>
                 <span className="text-white font-bold">{m.value} cm</span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {measurePoints.length > 0 && (
+        <SectionCard
+          title="Historial de mediciones"
+          subtitle="Más reciente primero"
+          action={<Ruler size={16} className="text-slate-500" />}
+          className="lg:col-span-2"
+        >
+          <div className="flex flex-col gap-2">
+            {measurePoints.map((p) => (
+              <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-3 bg-white/[0.02] rounded-xl">
+                <span className="text-sm text-slate-400">
+                  {fmtDate(p.iso, { day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  {[
+                    ['Cintura', p.waist],
+                    ['Pecho', p.chest],
+                    ['Cadera', p.hip],
+                    ['Brazo', p.arm],
+                    ['Pierna', p.leg],
+                  ]
+                    .filter(([, v]) => v != null)
+                    .map(([label, v]) => (
+                      <span key={label} className="text-slate-500">
+                        {label}: <strong className="text-slate-200">{v} cm</strong>
+                      </span>
+                    ))}
+                </div>
               </div>
             ))}
           </div>
@@ -634,6 +675,11 @@ export default function ClientDetail() {
           <div>
             <div className="text-slate-500 text-xs mb-1">Adherencia ent.</div>
             <div className="text-emerald-400 font-bold text-lg">{client.adherenceTraining != null ? `${client.adherenceTraining}%` : '—'}</div>
+            {client.weeklyTraining?.planned > 0 && (
+              <div className="text-slate-500 text-[11px] mt-0.5">
+                {client.weeklyTraining.done}/{client.weeklyTraining.planned} esta semana
+              </div>
+            )}
           </div>
         </div>
       </div>

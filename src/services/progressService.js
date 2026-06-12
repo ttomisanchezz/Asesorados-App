@@ -6,6 +6,8 @@ import { mockClients } from '../data/mockClients'
 // al shape agregado que espera el UI: { weightHistory[], dates[], measurements }.
 // Si ya viene en formato mock (objeto con weightHistory), se devuelve intacto.
 // ---------------------------------------------------------------------------
+const MEASUREMENT_FIELDS = ['waist', 'chest', 'hip', 'arm', 'leg']
+
 function normalizeProgress(data) {
   if (!data) return null
   if (!Array.isArray(data)) return data.weightHistory ? data : null
@@ -19,20 +21,33 @@ function normalizeProgress(data) {
   const label = (iso) =>
     new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 
-  const latest = ordered[ordered.length - 1] // fila más reciente por fecha
+  // Última medida POR CAMPO: un registro nuevo de solo-peso no debe "borrar"
+  // las medidas previas en la vista.
+  const latestOf = (field) => {
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      if (ordered[i][field] != null) return Number(ordered[i][field])
+    }
+    return null
+  }
+
   return {
     count: ordered.length,
     weightHistory: withWeight.map((r) => Number(r.weight)),
     dates: withWeight.map((r) => label(r.created_at)),
     // points: serie limpia para el gráfico/estadísticas (incluye id para poder editar por registro)
     points: withWeight.map((r) => ({ id: r.id, weight: Number(r.weight), iso: r.created_at, notes: r.notes ?? null })),
-    measurements: {
-      waist: latest.waist ?? null,
-      chest: latest.chest ?? null,
-      hip: latest.hip ?? null,
-      arm: latest.arm ?? null,
-      leg: latest.leg ?? null,
-    },
+    measurements: Object.fromEntries(MEASUREMENT_FIELDS.map((f) => [f, latestOf(f)])),
+    // measurementPoints: historial de mediciones (solo filas con alguna medida),
+    // ascendente por fecha — para listas/series de cintura, pecho, brazo, etc.
+    measurementPoints: ordered
+      .filter((r) => MEASUREMENT_FIELDS.some((f) => r[f] != null))
+      .map((r) => ({
+        id: r.id,
+        iso: r.created_at,
+        ...Object.fromEntries(
+          MEASUREMENT_FIELDS.map((f) => [f, r[f] != null ? Number(r[f]) : null]),
+        ),
+      })),
     entries: ordered,
   }
 }
@@ -149,6 +164,80 @@ export async function addMyProgressEntry({ weight, date, notes }) {
 
   // clients.weight (peso denormalizado) lo sincroniza el trigger
   // sync_client_weight en la DB de forma segura — no hace falta tocarlo desde acá.
+  return { data: result.data, error: null, updated: updating }
+}
+
+/**
+ * El asesorado autenticado registra sus mediciones corporales (cm) del día.
+ *
+ * Mismo patrón que addMyProgressEntry: resuelve client_id/coach_id reales desde
+ * clients (user_id = auth.uid()), nunca service_role, y RLS autoriza la
+ * escritura. Si ya existe un registro de progress_metrics para esa fecha, se
+ * actualizan solo los campos provistos (el peso del día no se toca); si no,
+ * se inserta una fila nueva. Así peso y medidas comparten el historial.
+ *
+ * @param {{ date:string, waist?:number, chest?:number, arm?:number, hip?:number, leg?:number }} payload
+ *        date = 'YYYY-MM-DD'; medidas en cm (solo se guardan las provistas)
+ * @returns {{ data, error, updated, reason? }}
+ */
+export async function addMyMeasurements({ date, waist, chest, arm, hip, leg }) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Requiere Supabase configurado'), updated: false }
+  }
+
+  const patch = {}
+  for (const [field, value] of Object.entries({ waist, chest, arm, hip, leg })) {
+    if (value != null) patch[field] = value
+  }
+  if (Object.keys(patch).length === 0) {
+    return { data: null, error: new Error('Cargá al menos una medida.'), updated: false }
+  }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: new Error('No autenticado'), updated: false }
+
+  const { data: client, error: cErr } = await supabase
+    .from('clients')
+    .select('id, coach_id')
+    .eq('user_id', user.id)
+    .single()
+  if (cErr || !client) {
+    return { data: null, error: cErr || new Error('Perfil no encontrado'), updated: false, reason: 'no-client' }
+  }
+
+  // ¿Ya hay un registro para ese día? (peso y medidas comparten la fila diaria)
+  const dayStart = `${date}T00:00:00.000Z`
+  const dayEnd = `${date}T23:59:59.999Z`
+  const { data: existing } = await supabase
+    .from('progress_metrics')
+    .select('id')
+    .eq('client_id', client.id)
+    .gte('created_at', dayStart)
+    .lte('created_at', dayEnd)
+    .limit(1)
+
+  const updating = Array.isArray(existing) && existing.length > 0
+  let result
+  if (updating) {
+    result = await supabase
+      .from('progress_metrics')
+      .update(patch)
+      .eq('id', existing[0].id)
+      .select()
+      .single()
+  } else {
+    result = await supabase
+      .from('progress_metrics')
+      .insert({
+        client_id: client.id,
+        coach_id: client.coach_id,
+        ...patch,
+        created_at: `${date}T12:00:00.000Z`,
+      })
+      .select()
+      .single()
+  }
+  if (result.error) return { data: null, error: result.error, updated: updating }
   return { data: result.data, error: null, updated: updating }
 }
 

@@ -7,6 +7,7 @@ import {
   getMyCheckinPhotos, uploadCheckinPhoto, deleteCheckinPhoto,
 } from '../services/photoService'
 import { groupPhotosByDay } from '../lib/photoGroups'
+import { isHeicFile, useCheckinPhotoUrl } from '../lib/heicPhoto'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
@@ -122,16 +123,18 @@ function CheckinCard({ c }) {
 
 // ── Miniatura con pose, hora y botón de borrar ──────────────────────────────
 function PhotoThumb({ photo, onDelete, deleting }) {
+  // Resuelve también fotos HEIC viejas (iPhone) que el navegador no muestra nativo.
+  const { src, converting } = useCheckinPhotoUrl(photo)
   const poseLabel = POSES.find((p) => p.value === photo.pose)?.label
   const ts = photo.created_at || photo.taken_at
   const when = ts ? new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : null
   return (
     <div className="group relative aspect-square overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-      {photo.url ? (
-        <img src={photo.url} alt={poseLabel || 'Foto de progreso'} loading="lazy" className="h-full w-full object-cover" />
+      {src ? (
+        <img src={src} alt={poseLabel || 'Foto de progreso'} loading="lazy" className="h-full w-full object-cover" />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-slate-600">
-          <ImageOff size={20} />
+          {converting ? <Loader2 size={20} className="animate-spin" /> : <ImageOff size={20} />}
         </div>
       )}
       {poseLabel && (
@@ -219,7 +222,8 @@ function PhotoUploadBlock() {
     if (picked.length === 0) return
 
     // Solo imágenes: el picker filtra con accept, pero algunos orígenes lo saltean.
-    const files = picked.filter((f) => f.type?.startsWith('image/'))
+    // Los HEIC de iPhone a veces llegan con type vacío: se aceptan por extensión.
+    const files = picked.filter((f) => f.type?.startsWith('image/') || isHeicFile(f))
     const skipped = picked.length - files.length
     if (files.length === 0) {
       setMsg({ type: 'error', text: 'Elegí archivos de imagen (JPG, PNG, etc.).' })
@@ -298,7 +302,7 @@ function PhotoUploadBlock() {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         multiple
         onChange={handleFiles}
         disabled={uploading}
