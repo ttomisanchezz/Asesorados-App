@@ -44,3 +44,48 @@ export function normalizeMealPlan(plan) {
 function empty() {
   return { type: 'empty', weekly: false, schemes: [] }
 }
+
+// Minúsculas y sin acentos, para comparar nombres de día sin sorpresas de locale.
+const strip = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+
+// ---------------------------------------------------------------------------
+// enumerateMeals — aplana las comidas del plan normalizado a una lista con una
+// clave estable por comida ("schemeIndex:mealIndex") y marca cuáles son "de hoy"
+// (las que cuentan para el % de cumplimiento del día):
+//   - plan diario (un esquema)     → todas las comidas son de hoy.
+//   - plan semanal (días)          → solo las del esquema del día de hoy; si hoy
+//                                     no figura en el plan, no hay comidas de hoy.
+//   - varios esquemas no-semanales → todas (no se sabe cuál aplica hoy).
+// `todayTotal` es el denominador honesto del % del día.
+// ---------------------------------------------------------------------------
+export function enumerateMeals(mealPlan, date = new Date()) {
+  if (!mealPlan || mealPlan.type === 'empty' || mealPlan.type === 'plain') {
+    return { meals: [], todayTotal: 0 }
+  }
+
+  const schemes = mealPlan.schemes ?? []
+
+  // Para planes semanales: índice del esquema cuyo nombre arranca con el día de hoy.
+  let todaySchemeIdx = -1
+  if (mealPlan.weekly) {
+    const todayName = strip(date.toLocaleDateString('es-AR', { weekday: 'long' }))
+    todaySchemeIdx = schemes.findIndex((s) => strip(s.scheme).startsWith(todayName))
+  }
+
+  const meals = []
+  schemes.forEach((s, schemeIndex) => {
+    s.meals.forEach((m, mealIndex) => {
+      const today = mealPlan.weekly ? schemeIndex === todaySchemeIdx : true
+      meals.push({
+        key: `${schemeIndex}:${mealIndex}`,
+        schemeIndex,
+        mealIndex,
+        schemeLabel: s.scheme || '',
+        mealName: m.name || '',
+        today,
+      })
+    })
+  })
+
+  return { meals, todayTotal: meals.filter((m) => m.today).length }
+}

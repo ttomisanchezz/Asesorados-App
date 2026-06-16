@@ -40,13 +40,20 @@ export function trainingAdherencePct(sessionsDone, plannedDays) {
 }
 
 /**
- * % de adherencia nutricional sobre los días registrados:
- * cumplido = 1, parcial = 0.5, no_cumplido = 0. Sin registros → null.
+ * % de adherencia nutricional promediado sobre los días registrados.
+ * Por día, la fracción cumplida es:
+ *   - comidas marcadas / comidas del plan, si hay ratio (meals_total > 0) — el
+ *     dato fino que dejó el marcado de comidas (FASE E);
+ *   - si no hay ratio, el enum: cumplido = 1, parcial = 0.5, no_cumplido = 0.
+ * Sin registros → null (no inventa 0%).
  */
 export function nutritionAdherencePct(complianceRows) {
   const rows = complianceRows ?? []
   if (rows.length === 0) return null
   const score = rows.reduce((sum, r) => {
+    if (r.meals_total != null && r.meals_total > 0) {
+      return sum + Math.min(1, (r.meals_done ?? 0) / r.meals_total)
+    }
     if (r.status === 'cumplido') return sum + 1
     if (r.status === 'parcial') return sum + 0.5
     return sum
@@ -80,7 +87,7 @@ export async function getWeeklyAdherenceMap(clientIds) {
       .in('client_id', ids)
       .eq('active', true),
     supabase.from('nutrition_compliance')
-      .select('client_id, status')
+      .select('client_id, status, meals_done, meals_total')
       .in('client_id', ids)
       .gte('log_date', weekStartDate),
     supabase.from('checkins')

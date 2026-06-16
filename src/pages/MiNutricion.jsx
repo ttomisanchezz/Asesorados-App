@@ -1,24 +1,17 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react'
 import {
   Utensils, Zap, AlertCircle, ChevronDown, Target,
-  CheckCircle2, MinusCircle, CircleSlash, Plus, Check, Loader2, Clock,
+  CheckCircle2, Circle, Plus, Check, Loader2, Clock,
 } from 'lucide-react'
 import {
-  getMyNutritionPlan, upsertCompliance, getMyCompliance, addFoodLog, getMyFoodLogs,
+  getMyNutritionPlan, setMealCheck, getMyMealChecks, addFoodLog, getMyFoodLogs,
 } from '../services/nutritionService'
 import { groupLogsByDay } from '../lib/foodLogs'
-import { normalizeMealPlan } from '../lib/mealPlan'
+import { normalizeMealPlan, enumerateMeals } from '../lib/mealPlan'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
 const NOTES_PREVIEW_LIMIT = 140
-
-// Fecha local YYYY-MM-DD (coincide con la que guarda el service).
-function todayLocalDate() {
-  const d = new Date()
-  const off = d.getTimezoneOffset()
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10)
-}
 
 // Título de día: "Hoy" / "Ayer" / nombre del día capitalizado.
 function dayTitle(offset, date) {
@@ -28,23 +21,15 @@ function dayTitle(offset, date) {
   return wd.charAt(0).toUpperCase() + wd.slice(1)
 }
 
-const COMPLIANCE_OPTIONS = [
-  {
-    value: 'cumplido', label: 'Cumplí', icon: CheckCircle2,
-    active: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300',
-    badge: 'bg-emerald-500/10 text-emerald-400',
-  },
-  {
-    value: 'parcial', label: 'A medias', icon: MinusCircle,
-    active: 'border-amber-500/40 bg-amber-500/15 text-amber-300',
-    badge: 'bg-amber-500/10 text-amber-400',
-  },
-  {
-    value: 'no_cumplido', label: 'No cumplí', icon: CircleSlash,
-    active: 'border-rose-500/40 bg-rose-500/15 text-rose-300',
-    badge: 'bg-rose-500/10 text-rose-400',
-  },
-]
+// Marcado de comidas: el asesorado marca la opción que comió en cada comida y de
+// ahí se deriva el % de cumplimiento del día. Context para no drillear props por
+// SchemeSection → MealAccordion → OptionCard.
+//   marks:    { [mealKey]: optionIndex }  — opción marcada por comida
+//   onToggle: ({ key, schemeLabel, mealName, optionIndex, optionTitle }) => void
+//   busyKey:  mealKey que se está guardando (para el spinner)
+// Todas las comidas son marcables; el % de hoy se calcula a nivel página sobre
+// las comidas del día que corresponde a la fecha actual.
+const MealMarkContext = createContext(null)
 
 // ── Tile de macro (calorías, proteínas, etc.) ────────────────────────────────
 // Si el coach todavía no cargó el macro (null), mostramos "— unidad" en gris en
@@ -104,9 +89,21 @@ function CoachNote({ notes }) {
 }
 
 // ── Opción de comida: título + kcal + macros + lista de alimentos ────────────
-function OptionCard({ option }) {
+// markable → muestra el botón "Marcar como comida" (solo en comidas de hoy).
+function OptionCard({ option, optionIndex, mealKey, schemeLabel, mealName }) {
+  const ctx = useContext(MealMarkContext)
+  // Toda comida del plan es marcable (cualquier día); el % de hoy se calcula
+  // aparte sobre el día que corresponde a la fecha actual.
+  const markable = Boolean(ctx && mealKey)
+  const marked = ctx ? ctx.marks[mealKey] === optionIndex : false
+  const busy = ctx?.busyKey === mealKey
+
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-4">
+    <div
+      className={`flex flex-col gap-3 rounded-xl border p-4 transition-colors ${
+        marked ? 'border-emerald-500/40 bg-emerald-500/[0.07]' : 'border-white/[0.04] bg-white/[0.02]'
+      }`}
+    >
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-semibold leading-snug text-white">{option.title}</span>
         {option.kcal != null && (
@@ -132,24 +129,58 @@ function OptionCard({ option }) {
           ))}
         </ul>
       )}
+
+      {markable && (
+        <button
+          type="button"
+          aria-pressed={marked}
+          disabled={busy}
+          onClick={() => ctx.onToggle({ key: mealKey, schemeLabel, mealName, optionIndex, optionTitle: option.title })}
+          className={`mt-1 flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all min-h-[40px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-60 ${
+            marked
+              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20'
+              : 'border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/[0.16] hover:text-white'
+          }`}
+        >
+          {busy ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : marked ? (
+            <CheckCircle2 size={14} />
+          ) : (
+            <Circle size={14} />
+          )}
+          {marked ? 'Comí esta opción' : 'Marcar como comida'}
+        </button>
+      )}
     </div>
   )
 }
 
 // ── Comida (Desayuno, Almuerzo, …) como acordeón con sus opciones ────────────
-function MealAccordion({ meal, defaultOpen = false }) {
+function MealAccordion({ meal, schemeIndex = 0, mealIndex = 0, schemeLabel = '', defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
+  const ctx = useContext(MealMarkContext)
   const count = meal.options?.length ?? 0
+  const mealKey = `${schemeIndex}:${mealIndex}`
+  const markedOption = ctx ? ctx.marks[mealKey] : undefined
+  const isMarked = markedOption != null
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+    <div className={`overflow-hidden rounded-xl border bg-white/[0.02] ${isMarked ? 'border-emerald-500/30' : 'border-white/[0.06]'}`}>
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
-        <span className="text-sm font-semibold text-white">{meal.name}</span>
-        <span className="flex items-center gap-2">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-white">{meal.name}</span>
+          {isMarked && (
+            <span className="flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+              <CheckCircle2 size={11} /> Comida
+            </span>
+          )}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
           <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
             {count} {count === 1 ? 'opción' : 'opciones'}
           </span>
@@ -161,7 +192,16 @@ function MealAccordion({ meal, defaultOpen = false }) {
       </button>
       {open && (
         <div className="flex flex-col gap-3 border-t border-white/[0.04] px-4 py-4">
-          {meal.options.map((opt, i) => <OptionCard key={i} option={opt} />)}
+          {meal.options.map((opt, i) => (
+            <OptionCard
+              key={i}
+              option={opt}
+              optionIndex={i}
+              mealKey={mealKey}
+              schemeLabel={schemeLabel}
+              mealName={meal.name}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -206,126 +246,52 @@ function SchemeSection({ scheme, index, defaultOpen }) {
       {/* Contenido colapsable — cada comida es su propio acordeón */}
       {open && (
         <div className="flex flex-col gap-2.5 border-t border-white/[0.04] px-4 py-4">
-          {scheme.meals?.map((meal, i) => <MealAccordion key={i} meal={meal} />)}
+          {scheme.meals?.map((meal, i) => (
+            <MealAccordion key={i} meal={meal} schemeIndex={index} mealIndex={i} schemeLabel={scheme.scheme} />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-// ── Bloque: ¿Cumpliste el plan de hoy? ───────────────────────────────────────
-function ComplianceBlock() {
-  const [today, setToday] = useState(null) // fila de hoy si ya cargó
-  const [selected, setSelected] = useState(null)
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState(null) // { type, text }
-
-  const load = useCallback(() => {
-    return getMyCompliance(7).then(({ data }) => {
-      const td = todayLocalDate()
-      const row = (data ?? []).find((r) => r.log_date === td) || null
-      setToday(row)
-      if (row) {
-        setSelected(row.status)
-        setNote(row.note ?? '')
-      }
-    })
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  async function handleSave() {
-    if (!selected) {
-      setMsg({ type: 'error', text: 'Elegí una opción primero.' })
-      return
-    }
-    setMsg(null)
-    setSaving(true)
-    const { error, reason } = await upsertCompliance({ status: selected, note })
-    setSaving(false)
-    if (error) {
-      setMsg({
-        type: 'error',
-        text: reason === 'no-client'
-          ? 'No encontramos tu perfil de asesorado vinculado. Contactá a tu coach.'
-          : error.message || 'No se pudo guardar.',
-      })
-      return
-    }
-    setMsg({ type: 'ok', text: today ? 'Cumplimiento actualizado.' : 'Cumplimiento registrado.' })
-    load()
-  }
-
-  const todayOpt = today ? COMPLIANCE_OPTIONS.find((o) => o.value === today.status) : null
+// ── Resumen: cumplimiento de hoy según las comidas marcadas ──────────────────
+// Reemplaza el viejo "¿Cumpliste el plan de hoy?": el % se calcula solo a partir
+// de las comidas que el asesorado marcó como comidas (abajo, en cada comida).
+function TodayComplianceCard({ done, total, pct, error }) {
+  const allDone = total > 0 && done >= total
+  const barColor = allDone ? 'bg-emerald-500' : pct > 0 ? 'bg-accent' : 'bg-white/10'
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-white/[0.06] bg-surface-800 px-5 py-5">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-white">¿Cumpliste el plan de hoy?</h3>
-        {todayOpt && (
-          <span className={`rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${todayOpt.badge}`}>
-            Hoy: {todayOpt.label}
+    <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-surface-800 px-5 py-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15">
+            <Utensils size={12} className="text-accent" />
           </span>
-        )}
+          <h3 className="text-sm font-semibold text-white">Tu cumplimiento de hoy</h3>
+        </div>
+        <span className={`text-xl font-bold tabular-nums ${allDone ? 'text-emerald-400' : 'text-accent'}`}>
+          {pct}%
+        </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {COMPLIANCE_OPTIONS.map((opt) => {
-          const Icon = opt.icon
-          const isActive = selected === opt.value
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setSelected(opt.value)}
-              aria-pressed={isActive}
-              className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-semibold transition-all min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
-                isActive
-                  ? opt.active
-                  : 'border-white/[0.06] bg-white/[0.02] text-slate-400 hover:text-white hover:border-white/[0.12]'
-              }`}
-            >
-              <Icon size={18} />
-              {opt.label}
-            </button>
-          )
-        })}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
+        <div className={`h-full rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="compliance-note" className="text-xs text-slate-500">Comentario (opcional)</label>
-        <input
-          id="compliance-note"
-          type="text"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Ej: me salté la colación de la tarde…"
-          className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
-        />
-      </div>
+      <p className="text-xs leading-relaxed text-slate-500">
+        Marcaste <strong className="text-slate-300">{done} de {total}</strong>{' '}
+        {total === 1 ? 'comida' : 'comidas'} del plan de hoy. Marcá la opción que comiste en cada
+        comida; tu coach ve este porcentaje en su panel.
+      </p>
 
-      {msg && (
-        <div
-          className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm ${
-            msg.type === 'ok'
-              ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300'
-              : 'border-rose-500/20 bg-rose-500/[0.06] text-rose-300'
-          }`}
-        >
-          {msg.type === 'ok' ? <Check size={15} className="shrink-0" /> : <AlertCircle size={15} className="shrink-0" />}
-          {msg.text}
+      {error && (
+        <div className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-3.5 py-2.5 text-sm text-rose-300">
+          <AlertCircle size={15} className="shrink-0" />
+          {error}
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className="flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-glow transition-all hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-      >
-        {saving ? <><Loader2 size={16} className="animate-spin" /> Guardando…</> : (today ? 'Actualizar cumplimiento' : 'Guardar cumplimiento')}
-      </button>
     </div>
   )
 }
@@ -501,6 +467,9 @@ export default function MiNutricion() {
   const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [marks, setMarks] = useState({})      // { [mealKey]: optionIndex }
+  const [busyKey, setBusyKey] = useState(null)
+  const [markError, setMarkError] = useState(null)
 
   useEffect(() => {
     getMyNutritionPlan()
@@ -517,13 +486,64 @@ export default function MiNutricion() {
   // Un plan puede existir con datos parciales (kcal cargada pero macros/comidas
   // pendientes). Lo informamos con claridad en vez de mostrar tiles que parecen
   // rotos. No se inventa ningún valor: lo que falta, falta.
-  const mealPlan = plan ? normalizeMealPlan(plan) : null
+  const mealPlan = useMemo(() => (plan ? normalizeMealPlan(plan) : null), [plan])
   const macrosComplete = plan && plan.protein != null && plan.carbs != null && plan.fat != null
   const hasMeals = mealPlan != null && mealPlan.type !== 'empty'
   const isPartial = plan && (!macrosComplete || !hasMeals)
   const pendingParts = []
   if (plan && !macrosComplete) pendingParts.push('los macros (proteínas, carbohidratos y grasas)')
   if (plan && !hasMeals) pendingParts.push('el detalle de comidas')
+
+  // ── Marcado de comidas: enumeración del plan + carga de marcas de hoy ───────
+  const { todayTotal, todayKeys } = useMemo(() => {
+    const { meals } = enumerateMeals(mealPlan)
+    const today = meals.filter((m) => m.today)
+    return { todayTotal: today.length, todayKeys: new Set(today.map((m) => m.key)) }
+  }, [mealPlan])
+
+  useEffect(() => {
+    if (!plan) return
+    getMyMealChecks().then(({ data }) => {
+      const map = {}
+      for (const r of data ?? []) if (r.option_index != null) map[r.meal_key] = r.option_index
+      setMarks(map)
+    })
+  }, [plan])
+
+  const handleToggle = useCallback(async ({ key, schemeLabel, mealName, optionIndex, optionTitle }) => {
+    setMarkError(null)
+    const isOn = marks[key] === optionIndex
+    const nextOption = isOn ? null : optionIndex
+    const snapshot = marks
+    // Optimista: la UI responde al toque; si falla, revertimos.
+    setMarks((m) => {
+      const n = { ...m }
+      if (nextOption == null) delete n[key]
+      else n[key] = nextOption
+      return n
+    })
+    setBusyKey(key)
+    const { error: saveErr } = await setMealCheck({
+      mealKey: key, schemeLabel, mealName, optionIndex: nextOption, optionTitle,
+      mealsTotal: todayTotal, countKeys: [...todayKeys],
+    })
+    setBusyKey(null)
+    if (saveErr) {
+      setMarks(snapshot)
+      setMarkError(saveErr.message || 'No se pudo guardar la comida. Probá de nuevo.')
+    }
+  }, [marks, todayTotal, todayKeys])
+
+  const markCtx = useMemo(
+    () => ({ marks, onToggle: handleToggle, busyKey }),
+    [marks, handleToggle, busyKey],
+  )
+
+  const doneToday = useMemo(
+    () => [...todayKeys].filter((k) => marks[k] != null).length,
+    [todayKeys, marks],
+  )
+  const pctToday = todayTotal > 0 ? Math.round((doneToday / todayTotal) * 100) : 0
 
   return (
     <div className="min-h-[100dvh] bg-surface-900 pb-12">
@@ -541,6 +561,7 @@ export default function MiNutricion() {
       )}
 
       {!loading && !error && (
+        <MealMarkContext.Provider value={markCtx}>
         <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 pt-6">
           {plan ? (
             <>
@@ -580,6 +601,11 @@ export default function MiNutricion() {
 
               {plan.notes && <CoachNote notes={plan.notes} />}
 
+              {/* Cumplimiento de hoy — solo si hay comidas marcables hoy. */}
+              {todayTotal > 0 && (
+                <TodayComplianceCard done={doneToday} total={todayTotal} pct={pctToday} error={markError} />
+              )}
+
               {/* Plan alimentario — desplegable. Soporta simple (por comidas),
                   semanal (por días) y texto libre. No inventa comidas. */}
               {mealPlan.type === 'empty' && (
@@ -613,7 +639,14 @@ export default function MiNutricion() {
                 <div className="flex flex-col gap-3">
                   <h2 className="text-sm font-semibold text-white">Plan alimentario</h2>
                   {mealPlan.schemes[0].meals.map((meal, i) => (
-                    <MealAccordion key={i} meal={meal} defaultOpen={i === 0} />
+                    <MealAccordion
+                      key={i}
+                      meal={meal}
+                      schemeIndex={0}
+                      mealIndex={i}
+                      schemeLabel={mealPlan.schemes[0].scheme}
+                      defaultOpen={i === 0}
+                    />
                   ))}
                 </div>
               )}
@@ -625,18 +658,19 @@ export default function MiNutricion() {
                   <Utensils size={16} className="text-slate-400" />
                 </span>
                 <p className="text-sm text-slate-400">
-                  Tu coach todavía no cargó tu plan. Igual podés registrar tu cumplimiento y tus comidas.
+                  Tu coach todavía no cargó tu plan. Igual podés registrar tus comidas. Cuando tengas
+                  un plan, vas a poder marcar qué comiste y ver tu cumplimiento.
                 </p>
               </div>
             </div>
           )}
 
           {/* Registro diario del asesorado */}
-          <ComplianceBlock />
           <FoodLogBlock />
 
           <BackToPanel />
         </div>
+        </MealMarkContext.Provider>
       )}
     </div>
   )

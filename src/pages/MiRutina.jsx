@@ -124,7 +124,12 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
           <span className="flex-1 text-center">Reps</span>
           <span className="w-6 shrink-0" />
         </div>
-        {sets.map((s, i) => (
+        {sets.map((s, i) => {
+          // Referencia de ESTA serie en la última sesión (no se repite la serie 1).
+          const prevSet = last?.sets?.[i + 1]
+          const prevWeight = prevSet?.weight ?? null
+          const prevReps = prevSet?.reps ?? null
+          return (
           <div key={i} className="flex items-center gap-2">
             <span className="flex h-9 w-12 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-xs font-semibold text-slate-400">
               {i + 1}
@@ -135,8 +140,8 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
               step="0.5"
               value={s.weight}
               onChange={(e) => setRow(i, 'weight', e.target.value)}
-              placeholder={last?.weight != null ? String(last.weight) : '—'}
-              aria-label={`Peso serie ${i + 1} de ${exercise.name}`}
+              placeholder={prevWeight != null ? String(prevWeight) : '—'}
+              aria-label={`Peso serie ${i + 1} de ${exercise.name}${prevWeight != null ? ` (última vez ${prevWeight} kg)` : ''}`}
               className="h-9 w-full flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-center text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
             />
             <input
@@ -145,8 +150,8 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
               step="1"
               value={s.reps}
               onChange={(e) => setRow(i, 'reps', e.target.value)}
-              placeholder={last?.reps != null ? String(last.reps) : '—'}
-              aria-label={`Repeticiones serie ${i + 1} de ${exercise.name}`}
+              placeholder={prevReps != null ? String(prevReps) : '—'}
+              aria-label={`Repeticiones serie ${i + 1} de ${exercise.name}${prevReps != null ? ` (última vez ${prevReps} reps)` : ''}`}
               className="h-9 w-full flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-center text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
             />
             <button
@@ -159,7 +164,8 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
               <X size={14} />
             </button>
           </div>
-        ))}
+          )
+        })}
         <button
           type="button"
           onClick={addSet}

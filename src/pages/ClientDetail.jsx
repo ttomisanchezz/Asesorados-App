@@ -71,16 +71,24 @@ function CoachComplianceList({ clientId }) {
     <div className="flex flex-col gap-2">
       {rows.map((r) => {
         const b = COMPLIANCE_BADGE[r.status] || { label: r.status, cls: 'bg-white/10 text-slate-400' }
+        // Si hay ratio de comidas (FASE E), mostramos el % real del día.
+        const hasRatio = r.meals_total != null && r.meals_total > 0
+        const pct = hasRatio ? Math.round(Math.min(1, (r.meals_done ?? 0) / r.meals_total) * 100) : null
         return (
           <div key={r.id} className="flex items-start justify-between gap-3 p-3 bg-white/[0.02] rounded-xl">
             <div className="min-w-0">
               <div className="text-white text-sm font-medium">
                 {r.log_date ? new Date(r.log_date + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'}
               </div>
+              {hasRatio && (
+                <div className="text-slate-500 text-xs mt-0.5">
+                  {r.meals_done ?? 0} de {r.meals_total} comidas marcadas
+                </div>
+              )}
               {r.note && <div className="text-slate-500 text-xs mt-0.5">{r.note}</div>}
             </div>
             <span className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${b.cls}`}>
-              {b.label}
+              {pct != null ? `${pct}%` : b.label}
             </span>
           </div>
         )

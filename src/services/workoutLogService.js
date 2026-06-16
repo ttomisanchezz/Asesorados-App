@@ -35,8 +35,14 @@ export function parseSetsCount(sets, fallback = 1) {
 
 /**
  * Último registro por ejercicio del asesorado autenticado.
- * Devuelve un mapa { [exercise_name]: { weight, reps, date } } con el log más
- * reciente de cada ejercicio — la "referencia anterior" para superar.
+ * Devuelve un mapa { [exercise_name]: { weight, reps, date, sets } } donde:
+ *   - sets:  { [setNumber]: { weight, reps } } con CADA serie de la última sesión
+ *            en la que se registró ese ejercicio (la "referencia anterior" por serie).
+ *   - weight/reps/date: representativos (serie 1 de esa sesión) — los conserva la
+ *            vista de lectura que muestra "Última vez: 80 kg × 8 reps".
+ *
+ * Antes solo se devolvía un único peso/reps por ejercicio y la UI lo repetía en
+ * todas las series; ahora cada serie muestra lo que realmente cargó esa serie.
  */
 export async function getMyLastLogsByExercise() {
   if (!isSupabaseConfigured) return { data: {}, error: null }
@@ -46,24 +52,45 @@ export async function getMyLastLogsByExercise() {
 
   const { data, error: qErr } = await supabase
     .from('workout_exercise_logs')
-    .select('exercise_name, weight, actual_reps, created_at')
+    .select('exercise_name, session_id, set_number, weight, actual_reps, created_at')
     .eq('client_id', client.id)
     .order('created_at', { ascending: false })
-    .limit(500)
+    .limit(1000)
 
   if (qErr) return { data: {}, error: qErr }
 
   const map = {}
   for (const row of data ?? []) {
-    // El primero que aparece (orden descendente) es el más reciente de ese ejercicio.
-    if (!map[row.exercise_name] && (row.weight != null || row.actual_reps != null)) {
+    const hasData = row.weight != null || row.actual_reps != null
+    if (!hasData) continue
+
+    // La primera fila que aparece para el ejercicio (orden descendente) fija la
+    // sesión más reciente; anclamos a su session_id para no mezclar sesiones.
+    if (!map[row.exercise_name]) {
       map[row.exercise_name] = {
-        weight: row.weight,
-        reps: row.actual_reps,
+        sessionId: row.session_id,
         date: row.created_at,
+        weight: null,
+        reps: null,
+        sets: {},
       }
     }
+    const ref = map[row.exercise_name]
+    if (row.session_id !== ref.sessionId) continue // solo la última sesión
+
+    if (row.set_number != null && !(row.set_number in ref.sets)) {
+      ref.sets[row.set_number] = { weight: row.weight, reps: row.actual_reps }
+    }
   }
+
+  // Representativo para la vista de lectura: la serie más baja registrada.
+  for (const ref of Object.values(map)) {
+    const nums = Object.keys(ref.sets).map(Number).sort((a, b) => a - b)
+    const first = nums.length ? ref.sets[nums[0]] : null
+    ref.weight = first?.weight ?? null
+    ref.reps = first?.reps ?? null
+  }
+
   return { data: map, error: null }
 }
 
