@@ -126,6 +126,160 @@ export async function getMyWeeklyTrainingCount(sinceIso) {
 }
 
 /**
+ * Historial de entrenamientos del asesorado autenticado, agregado para mostrar
+ * progresión a lo largo de las semanas: cómo fueron subiendo carga y series por
+ * ejercicio. Trae todas las sesiones + sus series y las resume.
+ *
+ * Por cada (ejercicio, sesión) calcula:
+ *   - sets:      cantidad de series registradas
+ *   - topWeight: peso más alto cargado en esa sesión
+ *   - maxReps:   reps máximas en una serie
+ *   - volume:    Σ (peso × reps) de todas las series (tonelaje)
+ *   - est1rm:    mejor 1RM estimado (Epley: peso × (1 + reps/30))
+ *
+ * @returns {{ data: {
+ *   totalSessions: number,
+ *   firstDate: string|null, lastDate: string|null,
+ *   sessions: Array<{ id, date, dayKey, dayName, notes, exerciseCount, totalSets, totalVolume }>,
+ *   exercises: Array<{
+ *     name: string, sessionsCount: number,
+ *     points: Array<{ date, sessionId, sets, topWeight, maxReps, volume, est1rm }>,
+ *     first: object, last: object,
+ *     weightDelta: number|null, setsDelta: number|null, volumeDelta: number|null,
+ *   }>,
+ * }|null, error: Error|null }}
+ */
+export async function getMyWorkoutHistory() {
+  if (!isSupabaseConfigured) return { data: null, error: null }
+
+  const { client, error } = await resolveClient()
+  if (!client) return { data: null, error }
+
+  // 1) Sesiones del asesorado, ascendentes por fecha de realización.
+  const { data: sessions, error: sErr } = await supabase
+    .from('workout_sessions')
+    .select('id, day_key, day_name, performed_at, notes, created_at')
+    .eq('client_id', client.id)
+    .order('performed_at', { ascending: true })
+    .limit(500)
+
+  if (sErr) return { data: null, error: sErr }
+
+  const empty = { totalSessions: 0, firstDate: null, lastDate: null, sessions: [], exercises: [] }
+  if (!sessions?.length) return { data: empty, error: null }
+
+  // 2) Series de todas esas sesiones.
+  const sessionIds = sessions.map((s) => s.id)
+  const { data: logs, error: lErr } = await supabase
+    .from('workout_exercise_logs')
+    .select('session_id, exercise_name, exercise_order, set_number, actual_reps, weight')
+    .in('session_id', sessionIds)
+    .limit(8000)
+
+  if (lErr) return { data: null, error: lErr }
+
+  // 3) Agrupar series por sesión y por ejercicio dentro de cada sesión.
+  const round = (n) => Math.round(n * 100) / 100
+  const dateOf = (s) => s.performed_at || s.created_at
+  const sessionById = new Map(sessions.map((s) => [s.id, s]))
+
+  // logsBySession: { sessionId: { exerciseName: { sets, topWeight, maxReps, volume, est1rm } } }
+  const agg = new Map() // sessionId -> Map(exerciseName -> metrics)
+  for (const row of logs ?? []) {
+    if (!agg.has(row.session_id)) agg.set(row.session_id, new Map())
+    const byEx = agg.get(row.session_id)
+    if (!byEx.has(row.exercise_name)) {
+      byEx.set(row.exercise_name, { sets: 0, topWeight: null, maxReps: null, volume: 0, est1rm: null })
+    }
+    const m = byEx.get(row.exercise_name)
+    m.sets += 1
+    const w = row.weight != null ? Number(row.weight) : null
+    const r = row.actual_reps != null ? Number(row.actual_reps) : null
+    if (w != null) m.topWeight = m.topWeight == null ? w : Math.max(m.topWeight, w)
+    if (r != null) m.maxReps = m.maxReps == null ? r : Math.max(m.maxReps, r)
+    if (w != null && r != null) {
+      m.volume += w * r
+      const e = w * (1 + r / 30)
+      m.est1rm = m.est1rm == null ? e : Math.max(m.est1rm, e)
+    }
+  }
+
+  // 4) Resumen por sesión (para el encabezado / actividad).
+  const sessionSummaries = sessions.map((s) => {
+    const byEx = agg.get(s.id)
+    let totalSets = 0
+    let totalVolume = 0
+    if (byEx) {
+      for (const m of byEx.values()) {
+        totalSets += m.sets
+        totalVolume += m.volume
+      }
+    }
+    return {
+      id: s.id,
+      date: dateOf(s),
+      dayKey: s.day_key,
+      dayName: s.day_name,
+      notes: s.notes,
+      exerciseCount: byEx ? byEx.size : 0,
+      totalSets,
+      totalVolume: round(totalVolume),
+    }
+  })
+
+  // 5) Serie de puntos por ejercicio, ascendente por fecha.
+  const exMap = new Map() // exerciseName -> points[]
+  for (const s of sessions) {
+    const byEx = agg.get(s.id)
+    if (!byEx) continue
+    for (const [name, m] of byEx.entries()) {
+      if (!exMap.has(name)) exMap.set(name, [])
+      exMap.get(name).push({
+        date: dateOf(s),
+        sessionId: s.id,
+        sets: m.sets,
+        topWeight: m.topWeight,
+        maxReps: m.maxReps,
+        volume: round(m.volume),
+        est1rm: m.est1rm != null ? round(m.est1rm) : null,
+      })
+    }
+  }
+
+  const delta = (a, b) => (a == null || b == null ? null : round(b - a))
+  const exercises = [...exMap.entries()].map(([name, points]) => {
+    const first = points[0]
+    const last = points[points.length - 1]
+    return {
+      name,
+      sessionsCount: points.length,
+      points,
+      first,
+      last,
+      weightDelta: delta(first.topWeight, last.topWeight),
+      setsDelta: delta(first.sets, last.sets),
+      volumeDelta: delta(first.volume, last.volume),
+    }
+  })
+
+  // Ordenar: primero los que más se entrenaron, luego por última fecha reciente.
+  exercises.sort((a, b) =>
+    b.sessionsCount - a.sessionsCount || new Date(b.last.date) - new Date(a.last.date),
+  )
+
+  return {
+    data: {
+      totalSessions: sessions.length,
+      firstDate: dateOf(sessions[0]),
+      lastDate: dateOf(sessions[sessions.length - 1]),
+      sessions: sessionSummaries,
+      exercises,
+    },
+    error: null,
+  }
+}
+
+/**
  * Guarda un entrenamiento completo (una sesión + sus series).
  *
  * @param {{
