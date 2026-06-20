@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Dumbbell, Zap, AlertCircle, ChevronDown, Video, History,
   Plus, X, Check, Loader2, ClipboardList,
@@ -7,8 +7,16 @@ import { getMyWorkoutPlan } from '../services/workoutService'
 import {
   getMyLastLogsByExercise, saveWorkoutSession, parseSetsCount,
 } from '../services/workoutLogService'
+import {
+  draftKeyFor, saveDraft, loadDraft, removeDraft, draftHasData,
+  formToExercises, exercisesToForm,
+} from '../lib/workoutDraft'
+import { useAuth } from '../context/AuthContext'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
+
+// Espera (ms) antes de volcar el borrador al storage tras dejar de escribir.
+const DRAFT_DEBOUNCE_MS = 800
 
 // Parsers tolerantes para los inputs del registro.
 const toDec = (v) => {
@@ -179,7 +187,7 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
 }
 
 // ── Acordeón de día — lectura + registro ─────────────────────────────────────
-function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved }) {
+function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved, userId }) {
   const [open, setOpen] = useState(defaultOpen)
   const [logging, setLogging] = useState(false)
   const [form, setForm] = useState([]) // por ejercicio: [{ weight, reps }]
@@ -187,17 +195,48 @@ function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null) // { type, text }
 
-  const exercises = day.exercises ?? []
+  const exercises = useMemo(() => day.exercises ?? [], [day.exercises])
+
+  // Clave del borrador local de ESTE día (por asesorado + plan + día).
+  const draftKey = draftKeyFor({ userId, planId, dayKey: day.day })
+
+  const defaultSetsFor = (ex) =>
+    Array.from({ length: parseSetsCount(ex.sets) }, () => ({ weight: '', reps: '' }))
+
+  // Borrador sin terminar de este día (solo en modo lectura). Derivado del
+  // storage: se recalcula al cambiar de día o al salir del modo registro.
+  const pendingDraft = useMemo(() => (logging ? null : loadDraft(draftKey)), [draftKey, logging])
+  const hasPending = !!pendingDraft && draftHasData(pendingDraft)
+
+  // Autoguardado: mientras carga, volcar lo escrito al storage (con debounce).
+  useEffect(() => {
+    if (!logging) return
+    const payload = { exercises: formToExercises(exercises, form), note }
+    if (!draftHasData(payload)) return
+    const t = setTimeout(() => saveDraft(draftKey, payload), DRAFT_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [logging, draftKey, form, note, exercises])
 
   const startLogging = () => {
-    setForm(
-      exercises.map((ex) =>
-        Array.from({ length: parseSetsCount(ex.sets) }, () => ({ weight: '', reps: '' })),
-      ),
-    )
+    setForm(exercises.map((ex) => defaultSetsFor(ex)))
     setNote('')
     setMsg(null)
     setLogging(true)
+  }
+
+  // "Seguir": recuperar el borrador y entrar a registrar con lo que tenía.
+  const resumeDraft = () => {
+    if (!pendingDraft) return
+    setForm(exercisesToForm(exercises, pendingDraft.exercises, defaultSetsFor))
+    setNote(pendingDraft.note ?? '')
+    setMsg(null)
+    setLogging(true)
+  }
+
+  // "Empezar de nuevo": descartar el borrador y arrancar la carga limpia.
+  const discardDraft = () => {
+    removeDraft(draftKey)
+    startLogging()
   }
 
   const cancelLogging = () => {
@@ -245,6 +284,8 @@ function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved }) {
       return
     }
 
+    // Guardado en firme: el borrador ya no hace falta.
+    removeDraft(draftKey)
     setMsg({ type: 'ok', text: `Entrenamiento guardado (${count} series).` })
     setLogging(false)
     onSaved?.()
@@ -281,13 +322,44 @@ function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved }) {
                   <ExerciseCard key={i} exercise={ex} index={i} last={lastLogs[ex.name]} />
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={startLogging}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/25 bg-accent/[0.08] py-3 text-sm font-semibold text-accent transition-all hover:bg-accent/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-              >
-                <ClipboardList size={16} /> Registrar entrenamiento
-              </button>
+
+              {hasPending ? (
+                <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-4">
+                  <div className="flex items-start gap-2.5">
+                    <History size={16} className="mt-0.5 shrink-0 text-amber-300" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-amber-200">Tenés un entrenamiento sin terminar</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-amber-200/70">
+                        Quedó un registro a medio cargar de este día. ¿Querés seguir desde donde lo dejaste o empezar de nuevo?
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={resumeDraft}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-glow transition-all hover:bg-accent-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                        >
+                          <ClipboardList size={15} /> Seguir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={discardDraft}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-4 py-2 text-sm text-slate-400 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                        >
+                          Empezar de nuevo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startLogging}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/25 bg-accent/[0.08] py-3 text-sm font-semibold text-accent transition-all hover:bg-accent/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                >
+                  <ClipboardList size={16} /> Registrar entrenamiento
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -402,6 +474,7 @@ function CoachNotes({ notes }) {
 
 // ── Página principal ─────────────────────────────────────────────────────────
 export default function MiRutina() {
+  const { user } = useAuth()
   const [plan, setPlan] = useState(null)
   const [planId, setPlanId] = useState(null)
   const [lastLogs, setLastLogs] = useState({})
@@ -480,6 +553,7 @@ export default function MiRutina() {
                   planId={planId}
                   lastLogs={lastLogs}
                   onSaved={refreshLogs}
+                  userId={user?.id}
                 />
               ))}
             </div>
