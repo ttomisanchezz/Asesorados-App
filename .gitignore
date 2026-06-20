@@ -31,3 +31,4 @@ scripts/*.local.json
 *.sln
 *.sw?
 .atl/
+.vercel
