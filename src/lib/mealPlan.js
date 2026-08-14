@@ -30,6 +30,7 @@ export function normalizeMealPlan(plan) {
     .map((s) => ({
       scheme: s.scheme || '',
       description: s.description || '',
+      target: s.target || null,
       meals: s.meals.filter((m) => m && Array.isArray(m.options) && m.options.length > 0),
     }))
     .filter((s) => s.meals.length > 0)
@@ -47,6 +48,33 @@ function empty() {
 
 // Minúsculas y sin acentos, para comparar nombres de día sin sorpresas de locale.
 const strip = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+export function getActiveMacroTarget(mealPlan, date = new Date()) {
+  if (!mealPlan || mealPlan.type === 'empty' || mealPlan.type === 'plain') return null
+
+  const schemes = mealPlan.schemes ?? []
+  if (!schemes.length) return null
+
+  let scheme
+  if (mealPlan.weekly) {
+    const todayName = strip(date.toLocaleDateString('es-AR', { weekday: 'long' }))
+    scheme = schemes.find((s) => strip(s.scheme).startsWith(todayName)) || null
+  } else if (schemes.length === 1) {
+    scheme = schemes[0]
+  } else {
+    scheme = schemes.find((s) => s.target) || null
+  }
+
+  const target = scheme?.target
+  if (!target) return null
+
+  return {
+    label: target.type || scheme.scheme || '',
+    calories: target.calories ?? null,
+    protein: target.protein ?? null,
+    carbs: target.carbs ?? null,
+    fats: target.fats ?? null,
+  }
+}
 
 // ---------------------------------------------------------------------------
 // enumerateMeals — aplana las comidas del plan normalizado a una lista con una

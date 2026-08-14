@@ -7,7 +7,7 @@ import {
   getMyNutritionPlan, setMealCheck, getMyMealChecks, addFoodLog, getMyFoodLogs,
 } from '../services/nutritionService'
 import { groupLogsByDay } from '../lib/foodLogs'
-import { normalizeMealPlan, enumerateMeals } from '../lib/mealPlan'
+import { normalizeMealPlan, enumerateMeals, getActiveMacroTarget } from '../lib/mealPlan'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { SubpageHeader, PanelEmpty, BackToPanel } from '../components/panel/PanelUI'
 
@@ -116,6 +116,17 @@ function OptionCard({ option, optionIndex, mealKey, schemeLabel, mealName }) {
           {option.macros.p != null && <span>P: <strong className="text-slate-300">{option.macros.p}g</strong></span>}
           {option.macros.c != null && <span>C: <strong className="text-slate-300">{option.macros.c}g</strong></span>}
           {option.macros.f != null && <span>G: <strong className="text-slate-300">{option.macros.f}g</strong></span>}
+        </div>
+      )}
+
+      {option.dayTotal && (
+        <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+          Total dia opcion: <strong className="text-slate-300">{option.dayTotal.kcal} kcal</strong>
+          {option.dayTotal.macros && (
+            <span>
+              {' '}| P {option.dayTotal.macros.p ?? '-'}g | C {option.dayTotal.macros.c ?? '-'}g | G {option.dayTotal.macros.f ?? '-'}g
+            </span>
+          )}
         </div>
       )}
 
@@ -487,7 +498,12 @@ export default function MiNutricion() {
   // pendientes). Lo informamos con claridad en vez de mostrar tiles que parecen
   // rotos. No se inventa ningún valor: lo que falta, falta.
   const mealPlan = useMemo(() => (plan ? normalizeMealPlan(plan) : null), [plan])
-  const macrosComplete = plan && plan.protein != null && plan.carbs != null && plan.fat != null
+  const activeTarget = useMemo(() => (mealPlan ? getActiveMacroTarget(mealPlan) : null), [mealPlan])
+  const targetCalories = activeTarget?.calories ?? plan?.calories
+  const targetProtein = activeTarget?.protein ?? plan?.protein
+  const targetCarbs = activeTarget?.carbs ?? plan?.carbs
+  const targetFat = activeTarget?.fats ?? plan?.fat
+  const macrosComplete = plan && targetProtein != null && targetCarbs != null && targetFat != null
   const hasMeals = mealPlan != null && mealPlan.type !== 'empty'
   const isPartial = plan && (!macrosComplete || !hasMeals)
   const pendingParts = []
@@ -573,18 +589,25 @@ export default function MiNutricion() {
                     <> · {new Date(plan.lastUpdate).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}</>
                   )}
                 </p>
-                {plan.objective && (
-                  <span className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-accent/[0.1] px-2.5 py-1 text-xs font-medium text-accent">
-                    <Target size={12} /> {plan.objective}
-                  </span>
-                )}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {plan.objective && (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent/[0.1] px-2.5 py-1 text-xs font-medium text-accent">
+                      <Target size={12} /> {plan.objective}
+                    </span>
+                  )}
+                  {activeTarget?.label && (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-slate-300">
+                      Hoy: {activeTarget.label}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <MacroTile label="Calorías" value={plan.calories} unit="kcal" color="text-accent" />
-                <MacroTile label="Proteínas" value={plan.protein} unit="g" color="text-emerald-400" />
-                <MacroTile label="Carbohidratos" value={plan.carbs} unit="g" color="text-amber-400" />
-                <MacroTile label="Grasas" value={plan.fat} unit="g" color="text-sky-400" />
+                <MacroTile label="Calorías" value={targetCalories} unit="kcal" color="text-accent" />
+                <MacroTile label="Proteínas" value={targetProtein} unit="g" color="text-emerald-400" />
+                <MacroTile label="Carbohidratos" value={targetCarbs} unit="g" color="text-amber-400" />
+                <MacroTile label="Grasas" value={targetFat} unit="g" color="text-sky-400" />
               </div>
 
               {isPartial && (

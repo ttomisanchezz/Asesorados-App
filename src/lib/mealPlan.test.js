@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeMealPlan, enumerateMeals } from './mealPlan'
+import { normalizeMealPlan, enumerateMeals, getActiveMacroTarget } from './mealPlan'
 
 const meal = (name) => ({ name, options: [{ title: 'Opción', items: ['pollo'], kcal: 500 }] })
 
@@ -102,5 +102,25 @@ describe('enumerateMeals', () => {
     })
     const martes = new Date('2026-06-16T12:00:00') // martes, no está en el plan
     expect(enumerateMeals(mp, martes).todayTotal).toBe(0)
+  })
+})
+
+describe('getActiveMacroTarget', () => {
+  it('plan semanal con targets -> devuelve el objetivo del dia actual', () => {
+    const mp = normalizeMealPlan({
+      meals: [
+        { scheme: 'Lunes', target: { type: 'Gym + Jiujitsu', calories: 2300, protein: 78, carbs: 409, fats: 39 }, meals: [meal('Desayuno')] },
+        { scheme: 'Martes', target: { type: 'Gym solo', calories: 2000, protein: 78, carbs: 334, fats: 39 }, meals: [meal('Cena')] },
+      ],
+    })
+    const lunes = new Date('2026-06-15T12:00:00')
+    expect(getActiveMacroTarget(mp, lunes)).toEqual({
+      label: 'Gym + Jiujitsu', calories: 2300, protein: 78, carbs: 409, fats: 39,
+    })
+  })
+
+  it('sin target -> null', () => {
+    const mp = normalizeMealPlan({ meals: [{ scheme: 'Lunes', meals: [meal('Desayuno')] }] })
+    expect(getActiveMacroTarget(mp, new Date('2026-06-15T12:00:00'))).toBe(null)
   })
 })

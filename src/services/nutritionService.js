@@ -1,18 +1,60 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 import { mockClients } from '../data/mockClients'
+import { demoNutritionHistory } from '../data/demoRuntime'
+
+function demoHistory(clientId) {
+  if (!demoNutritionHistory.has(clientId)) {
+    const source = mockClients.find((client) => client.id === clientId)?.nutrition
+    demoNutritionHistory.set(clientId, source ? [{
+      ...source, id: `demo-nutrition-${clientId}`, active: true,
+      createdAt: source.lastUpdate ? `${source.lastUpdate}T00:00:00` : new Date().toISOString(),
+    }] : [])
+  }
+  return demoNutritionHistory.get(clientId)
+}
 
 // Convierte el row de Supabase al formato que usa el UI
-function normalizeNutritionPlan(raw) {
+export function normalizeNutritionPlan(raw) {
   if (!raw) return null
   if (raw.lastUpdate !== undefined) return raw // ya normalizado (mock)
   return {
+    id:         raw.id ?? null,
+    clientId:   raw.client_id ?? null,
+    title:      raw.title ?? '',
     calories:   raw.calories,
     protein:    raw.protein,
     carbs:      raw.carbs,
     fat:        raw.fats,          // Supabase: fats → UI: fat
     meals:      raw.meals ?? [],
     notes:      raw.notes ?? '',
+    active:     raw.active ?? false,
+    createdAt:  raw.created_at ?? null,
+    updatedAt:  raw.updated_at ?? null,
     lastUpdate: raw.updated_at?.slice(0, 10) ?? '',
+  }
+}
+
+function nutritionPayload(payload) {
+  return {
+    title: payload.title?.trim() || null,
+    calories: payload.calories === '' ? null : payload.calories ?? null,
+    protein: payload.protein === '' ? null : payload.protein ?? null,
+    carbs: payload.carbs === '' ? null : payload.carbs ?? null,
+    fats: payload.fats === '' ? null : payload.fats ?? payload.fat ?? null,
+    meals: payload.meals ?? [],
+    notes: payload.notes?.trim() || null,
+  }
+}
+
+async function getAllClientRows(table, clientId, orderColumn) {
+  const rows = []
+  const pageSize = 1000
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from(table).select('*').eq('client_id', clientId)
+      .order(orderColumn, { ascending: false }).range(from, from + pageSize - 1)
+    if (error) return { data: rows, error }
+    rows.push(...(data ?? []))
+    if ((data?.length ?? 0) < pageSize) return { data: rows, error: null }
   }
 }
 
@@ -21,9 +63,8 @@ function normalizeNutritionPlan(raw) {
  */
 export async function getNutritionPlan(clientId) {
   if (!isSupabaseConfigured) {
-    const client = mockClients.find((c) => c.id === clientId)
     return {
-      data: client?.nutrition ?? null,
+      data: demoHistory(clientId).find((plan) => plan.active) ?? null,
       error: null,
       source: 'mock',
     }
@@ -81,32 +122,72 @@ export async function getMyNutritionPlan() {
 /**
  * Crea o actualiza el plan nutricional de un cliente.
  */
-export async function upsertNutritionPlan(clientId, payload) {
+export async function createNutritionPlanVersion(clientId, payload) {
   if (!isSupabaseConfigured) {
-    return { data: null, error: new Error('Requiere Supabase configurado') }
+    const history = demoHistory(clientId)
+    history.forEach((plan) => { plan.active = false })
+    const created = { ...payload, id: `demo-nutrition-${Date.now()}`, active: true, createdAt: new Date().toISOString(), lastUpdate: new Date().toISOString().slice(0, 10) }
+    history.unshift(created)
+    return { data: created, error: null, source: 'mock' }
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const clean = nutritionPayload(payload)
+  const { data, error } = await supabase.rpc('create_nutrition_plan_version', {
+    p_client_id: clientId,
+    p_title: clean.title,
+    p_calories: clean.calories,
+    p_protein: clean.protein,
+    p_carbs: clean.carbs,
+    p_fats: clean.fats,
+    p_meals: clean.meals,
+    p_notes: clean.notes,
+  })
 
-  // Desactivar plan anterior
-  await supabase
-    .from('nutrition_plans')
-    .update({ active: false })
-    .eq('client_id', clientId)
-    .eq('active', true)
+  return { data: error ? null : normalizeNutritionPlan(data), error }
+}
+
+/** Historial completo, con la versión activa primero y luego por fecha. */
+export async function getNutritionPlanHistory(clientId) {
+  if (!isSupabaseConfigured) {
+    return { data: [...demoHistory(clientId)], error: null, source: 'mock' }
+  }
 
   const { data, error } = await supabase
     .from('nutrition_plans')
-    .insert({
-      ...payload,
-      client_id: clientId,
-      coach_id: user.id,
-      active: true,
-    })
+    .select('*')
+    .eq('client_id', clientId)
+    .order('active', { ascending: false })
+    .order('created_at', { ascending: false })
+
+  return { data: error ? [] : (data ?? []).map(normalizeNutritionPlan), error, source: 'supabase' }
+}
+
+/** Edita una versión existente sin activarla ni alterar el resto del historial. */
+export async function updateNutritionPlanVersion(planId, payload) {
+  if (!isSupabaseConfigured) {
+    for (const history of demoNutritionHistory.values()) {
+      const index = history.findIndex((plan) => plan.id === planId)
+      if (index >= 0) {
+        history[index] = { ...history[index], ...payload, updatedAt: new Date().toISOString(), lastUpdate: new Date().toISOString().slice(0, 10) }
+        return { data: history[index], error: null, source: 'mock' }
+      }
+    }
+    return { data: null, error: new Error('Plan no encontrado'), source: 'mock' }
+  }
+
+  const { data, error } = await supabase
+    .from('nutrition_plans')
+    .update(nutritionPayload(payload))
+    .eq('id', planId)
     .select()
     .single()
 
-  return { data, error }
+  return { data: error ? null : normalizeNutritionPlan(data), error }
+}
+
+/** Alias conservado para consumidores existentes. */
+export async function upsertNutritionPlan(clientId, payload) {
+  return createNutritionPlanVersion(clientId, payload)
 }
 
 // ===========================================================================
@@ -408,4 +489,38 @@ export async function getMealChecks(clientId, date) {
     .limit(100)
 
   return { data: error ? [] : (data ?? []), error, source: 'supabase' }
+}
+
+/**
+ * Dataset completo para la agenda semanal del coach. No aplica una ventana
+ * artificial de días: las semanas disponibles se derivan de estos registros.
+ */
+export async function getClientNutritionActivity(clientId) {
+  if (!isSupabaseConfigured) {
+    const history = await getNutritionPlanHistory(clientId)
+    return {
+      data: { plans: history.data, compliance: [], logs: [], mealChecks: [] },
+      error: null,
+      source: 'mock',
+    }
+  }
+
+  const [plansResult, complianceResult, logsResult, checksResult] = await Promise.all([
+    getNutritionPlanHistory(clientId),
+    getAllClientRows('nutrition_compliance', clientId, 'log_date'),
+    getAllClientRows('nutrition_logs', clientId, 'logged_at'),
+    getAllClientRows('nutrition_meal_checks', clientId, 'log_date'),
+  ])
+
+  const error = plansResult.error || complianceResult.error || logsResult.error || checksResult.error
+  return {
+    data: {
+      plans: plansResult.data ?? [],
+      compliance: complianceResult.data ?? [],
+      logs: logsResult.data ?? [],
+      mealChecks: checksResult.data ?? [],
+    },
+    error,
+    source: 'supabase',
+  }
 }

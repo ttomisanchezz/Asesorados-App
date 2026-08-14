@@ -4,6 +4,7 @@ import {
   ArrowLeft, User, Dumbbell, Utensils, TrendingUp,
   ClipboardCheck, Phone, Mail, AlertCircle, Calendar,
   Camera, ImageOff, Clock, MessageSquare, Loader2, Ruler,
+  Pencil,
 } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import Badge from '../components/ui/Badge'
@@ -11,7 +12,7 @@ import Button from '../components/ui/Button'
 import SectionCard from '../components/ui/SectionCard'
 import ProgressBar from '../components/ui/ProgressBar'
 import { PageLoader } from '../components/ui/LoadingSpinner'
-import { getClientById } from '../services/clientService'
+import { getClientById, updateClient } from '../services/clientService'
 import { getCompliance, getFoodLogs, getNutritionPlan } from '../services/nutritionService'
 import { getWorkoutPlan } from '../services/workoutService'
 import { getProgressMetrics } from '../services/progressService'
@@ -19,6 +20,7 @@ import { getCheckins } from '../services/checkinService'
 import { getClientCheckinPhotos } from '../services/photoService'
 import { useCheckinPhotoUrl } from '../lib/heicPhoto'
 import { normalizeMealPlan } from '../lib/mealPlan'
+import Modal from '../components/coach/Modal'
 
 const TABS = [
   { id: 'summary', label: 'Resumen', icon: User },
@@ -574,6 +576,65 @@ function ProgressTab({ client }) {
   )
 }
 
+const EDIT_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+const editInput = 'w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-accent/50'
+const editLabel = 'mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500'
+
+function EditClientForm({ client, onSaved }) {
+  const [form, setForm] = useState({
+    name: client.name || '', email: client.email || '', phone: client.phone || '',
+    objective: client.objective || '', age: client.age ?? '', gender: client.gender || '',
+    weight: client.weight ?? '', targetWeight: client.targetWeight ?? '', height: client.height ?? '',
+    experience: client.experience || '', availableDays: client.availableDays ?? [],
+    limitations: client.limitations || '', internalNotes: client.internalNotes || '',
+    weeklyGoal: client.weeklyGoal || '', nextReview: client.nextReview || '',
+    lastCheckin: client.lastCheckin || '', status: client.status || 'active',
+    avatar: client.avatar || '', avatarColor: client.avatarColor || '#6c63ff',
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const field = (label, key, props = {}) => (
+    <label><span className={editLabel}>{label}</span><input className={editInput} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} {...props} /></label>
+  )
+  const submit = async (event) => {
+    event.preventDefault()
+    setBusy(true); setError('')
+    const optionalNumber = (value) => value === '' ? null : Number(value)
+    const { data, error: updateError } = await updateClient(client.id, {
+      full_name: form.name.trim(), email: form.email.trim() || null, phone: form.phone.trim() || null,
+      objective: form.objective.trim() || null, age: optionalNumber(form.age), gender: form.gender.trim() || null,
+      weight: optionalNumber(form.weight), target_weight: optionalNumber(form.targetWeight), height: optionalNumber(form.height),
+      experience: form.experience.trim() || null, available_days: form.availableDays,
+      limitations: form.limitations.trim() || null, internal_notes: form.internalNotes.trim() || null,
+      weekly_goal: form.weeklyGoal.trim() || null, next_review: form.nextReview || null,
+      last_checkin: form.lastCheckin || null, status: form.status,
+      avatar_initials: form.avatar.trim() || null, avatar_color: form.avatarColor || null,
+    })
+    setBusy(false)
+    if (updateError) return setError(updateError.message || 'No se pudo guardar la ficha.')
+    onSaved(data)
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+      <div className="sm:col-span-2">{field('Nombre completo', 'name', { required: true })}</div>
+      {field('Email', 'email', { type: 'email' })}{field('Teléfono', 'phone')}
+      {field('Objetivo', 'objective')}{field('Género', 'gender')}
+      {field('Edad', 'age', { type: 'number', min: 0 })}{field('Altura (cm)', 'height', { type: 'number', min: 0 })}
+      {field('Peso actual (kg)', 'weight', { type: 'number', min: 0, step: 0.1 })}{field('Peso objetivo (kg)', 'targetWeight', { type: 'number', min: 0, step: 0.1 })}
+      {field('Experiencia', 'experience')}{field('Objetivo semanal', 'weeklyGoal')}
+      {field('Próxima revisión', 'nextReview', { type: 'date' })}{field('Último check-in', 'lastCheckin', { type: 'date' })}
+      {field('Iniciales', 'avatar')}{field('Color del avatar', 'avatarColor', { type: 'color' })}
+      <label><span className={editLabel}>Estado</span><select className={editInput} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="active">Activo</option><option value="paused">Pausado</option><option value="finished">Finalizado</option></select></label>
+      <div className="sm:col-span-2"><span className={editLabel}>Días disponibles</span><div className="flex flex-wrap gap-2">{EDIT_DAYS.map((day) => <button type="button" key={day} onClick={() => setForm({ ...form, availableDays: form.availableDays.includes(day) ? form.availableDays.filter((item) => item !== day) : [...form.availableDays, day] })} className={`rounded-lg border px-2.5 py-1.5 text-xs ${form.availableDays.includes(day) ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.07] text-slate-500'}`}>{day}</button>)}</div></div>
+      <label className="sm:col-span-2"><span className={editLabel}>Limitaciones</span><textarea rows="2" className={editInput} value={form.limitations} onChange={(e) => setForm({ ...form, limitations: e.target.value })} /></label>
+      <label className="sm:col-span-2"><span className={editLabel}>Notas internas</span><textarea rows="3" className={editInput} value={form.internalNotes} onChange={(e) => setForm({ ...form, internalNotes: e.target.value })} /></label>
+      {error && <p className="sm:col-span-2 rounded-xl border border-rose-500/20 bg-rose-500/[0.06] p-3 text-sm text-rose-300">{error}</p>}
+      <button disabled={busy} className="sm:col-span-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar ficha'}</button>
+    </form>
+  )
+}
+
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -581,6 +642,7 @@ export default function ClientDetail() {
   const [loading, setLoading]   = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [activeTab, setActiveTab] = useState('summary')
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -644,6 +706,7 @@ export default function ClientDetail() {
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h1 className="text-xl font-bold text-white">{client.name}</h1>
               <Badge variant={client.status} />
+              <Button variant="ghost" size="sm" icon={Pencil} onClick={() => setEditing(true)}>Editar ficha</Button>
             </div>
             {heroMeta && <p className="text-slate-400 text-sm">{heroMeta}</p>}
             <div className="flex flex-wrap gap-4 mt-3">
@@ -670,7 +733,9 @@ export default function ClientDetail() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-white/[0.05]">
           <div>
             <div className="text-slate-500 text-xs mb-1">Peso actual</div>
-            <div className="text-white font-bold text-lg">{client.weight != null ? `${client.weight} kg` : '—'}</div>
+            <div className="text-white font-bold text-lg">
+              {client.weight != null ? `${client.weight} kg` : client.weightRange ? `${client.weightRange} kg` : '—'}
+            </div>
           </div>
           <div>
             <div className="text-slate-500 text-xs mb-1">Objetivo</div>
@@ -717,7 +782,7 @@ export default function ClientDetail() {
             <div className="grid grid-cols-2 gap-3">
               {[
                 ['Altura', client.height != null ? `${client.height} cm` : '—'],
-                ['Peso', client.weight != null ? `${client.weight} kg` : '—'],
+                ['Peso', client.weight != null ? `${client.weight} kg` : client.weightRange ? `${client.weightRange} kg` : '—'],
                 ['Objetivo de peso', client.targetWeight != null ? `${client.targetWeight} kg` : '—'],
                 ['Experiencia', client.experience || '—'],
                 ['Días disponibles', client.availableDays?.length || '—'],
@@ -790,6 +855,14 @@ export default function ClientDetail() {
       {activeTab === 'training' && <TrainingTab clientId={client.id} />}
       {activeTab === 'checkins' && <CheckinsTab clientId={client.id} />}
       {activeTab === 'progress' && <ProgressTab client={client} />}
+
+      <Modal open={editing} onClose={() => setEditing(false)} title={`Editar ficha · ${client.name}`} subtitle="Datos personales y de seguimiento" width="max-w-3xl">
+        <EditClientForm client={client} onSaved={async () => {
+          const refreshed = await getClientById(client.id)
+          if (refreshed.data) setClient(refreshed.data)
+          setEditing(false)
+        }} />
+      </Modal>
     </Layout>
   )
 }

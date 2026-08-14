@@ -118,7 +118,7 @@ export default function Progress() {
                       </div>
                       <div className="bg-white/[0.03] rounded-xl p-3 text-center">
                         <div className="text-slate-500 text-xs mb-1">Peso actual</div>
-                        <div className="text-white font-bold text-xl">{currentW ?? '—'}</div>
+                        <div className="text-white font-bold text-xl">{currentW ?? client.weightRange ?? '—'}</div>
                         <div className="text-slate-600 text-xs">kg</div>
                       </div>
                       <div className="bg-white/[0.03] rounded-xl p-3 text-center">
@@ -222,7 +222,9 @@ export default function Progress() {
                             </div>
                           </td>
                           <td className="py-3 pr-4 text-slate-400">{c.objective || '—'}</td>
-                          <td className="py-3 pr-4 text-white font-semibold">{c.weight != null ? `${c.weight} kg` : '—'}</td>
+                          <td className="py-3 pr-4 text-white font-semibold">
+                            {c.weight != null ? `${c.weight} kg` : c.weightRange ? `${c.weightRange} kg` : '—'}
+                          </td>
                           <td className="py-3 pr-4">
                             <span className={(c.adherenceNutrition ?? 0) >= 85 ? 'text-emerald-400' : (c.adherenceNutrition ?? 0) >= 65 ? 'text-amber-400' : 'text-rose-400'}>
                               {c.adherenceNutrition ?? 0}%

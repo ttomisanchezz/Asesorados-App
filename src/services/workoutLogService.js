@@ -33,6 +33,18 @@ export function parseSetsCount(sets, fallback = 1) {
   return Math.max(...nums.map(Number)) || fallback
 }
 
+async function getAllRows(table, columns, clientId, orderColumn) {
+  const rows = []
+  const pageSize = 1000
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from(table).select(columns).eq('client_id', clientId)
+      .order(orderColumn, { ascending: true }).range(from, from + pageSize - 1)
+    if (error) return { data: rows, error }
+    rows.push(...(data ?? []))
+    if ((data?.length ?? 0) < pageSize) return { data: rows, error: null }
+  }
+}
+
 /**
  * Último registro por ejercicio del asesorado autenticado.
  * Devuelve un mapa { [exercise_name]: { weight, reps, date, sets } } donde:
@@ -52,7 +64,7 @@ export async function getMyLastLogsByExercise() {
 
   const { data, error: qErr } = await supabase
     .from('workout_exercise_logs')
-    .select('exercise_name, session_id, set_number, weight, actual_reps, created_at')
+    .select('exercise_name, session_id, set_number, weight, actual_reps, rir, created_at')
     .eq('client_id', client.id)
     .order('created_at', { ascending: false })
     .limit(1000)
@@ -79,7 +91,7 @@ export async function getMyLastLogsByExercise() {
     if (row.session_id !== ref.sessionId) continue // solo la última sesión
 
     if (row.set_number != null && !(row.set_number in ref.sets)) {
-      ref.sets[row.set_number] = { weight: row.weight, reps: row.actual_reps }
+      ref.sets[row.set_number] = { weight: row.weight, reps: row.actual_reps, rir: row.rir }
     }
   }
 
@@ -149,19 +161,15 @@ export async function getMyWeeklyTrainingCount(sinceIso) {
  *   }>,
  * }|null, error: Error|null }}
  */
-export async function getMyWorkoutHistory() {
+export async function getWorkoutHistory(clientId) {
   if (!isSupabaseConfigured) return { data: null, error: null }
-
-  const { client, error } = await resolveClient()
-  if (!client) return { data: null, error }
+  if (!clientId) return { data: null, error: new Error('Cliente requerido') }
 
   // 1) Sesiones del asesorado, ascendentes por fecha de realización.
-  const { data: sessions, error: sErr } = await supabase
-    .from('workout_sessions')
-    .select('id, day_key, day_name, performed_at, notes, created_at')
-    .eq('client_id', client.id)
-    .order('performed_at', { ascending: true })
-    .limit(500)
+  const { data: sessions, error: sErr } = await getAllRows(
+    'workout_sessions', 'id, day_key, day_name, performed_at, notes, created_at',
+    clientId, 'performed_at',
+  )
 
   if (sErr) return { data: null, error: sErr }
 
@@ -169,38 +177,43 @@ export async function getMyWorkoutHistory() {
   if (!sessions?.length) return { data: empty, error: null }
 
   // 2) Series de todas esas sesiones.
-  const sessionIds = sessions.map((s) => s.id)
-  const { data: logs, error: lErr } = await supabase
-    .from('workout_exercise_logs')
-    .select('session_id, exercise_name, exercise_order, set_number, actual_reps, weight')
-    .in('session_id', sessionIds)
-    .limit(8000)
+  const { data: logs, error: lErr } = await getAllRows(
+    'workout_exercise_logs',
+    'session_id, exercise_name, exercise_order, set_number, actual_reps, weight, rir, created_at',
+    clientId, 'created_at',
+  )
 
   if (lErr) return { data: null, error: lErr }
 
   // 3) Agrupar series por sesión y por ejercicio dentro de cada sesión.
   const round = (n) => Math.round(n * 100) / 100
   const dateOf = (s) => s.performed_at || s.created_at
-  const sessionById = new Map(sessions.map((s) => [s.id, s]))
-
   // logsBySession: { sessionId: { exerciseName: { sets, topWeight, maxReps, volume, est1rm } } }
   const agg = new Map() // sessionId -> Map(exerciseName -> metrics)
   for (const row of logs ?? []) {
     if (!agg.has(row.session_id)) agg.set(row.session_id, new Map())
     const byEx = agg.get(row.session_id)
     if (!byEx.has(row.exercise_name)) {
-      byEx.set(row.exercise_name, { sets: 0, topWeight: null, maxReps: null, volume: 0, est1rm: null })
+      byEx.set(row.exercise_name, {
+        sets: 0, topWeight: null, maxReps: null, volume: 0, est1rm: null,
+        bestSet: null, setDetails: [],
+      })
     }
     const m = byEx.get(row.exercise_name)
     m.sets += 1
     const w = row.weight != null ? Number(row.weight) : null
     const r = row.actual_reps != null ? Number(row.actual_reps) : null
+    const rir = row.rir != null ? Number(row.rir) : null
+    m.setDetails.push({ setNumber: row.set_number, weight: w, reps: r, rir })
     if (w != null) m.topWeight = m.topWeight == null ? w : Math.max(m.topWeight, w)
     if (r != null) m.maxReps = m.maxReps == null ? r : Math.max(m.maxReps, r)
     if (w != null && r != null) {
       m.volume += w * r
       const e = w * (1 + r / 30)
-      m.est1rm = m.est1rm == null ? e : Math.max(m.est1rm, e)
+      if (m.est1rm == null || e > m.est1rm) {
+        m.est1rm = e
+        m.bestSet = { weight: w, reps: r, rir, est1rm: round(e) }
+      }
     }
   }
 
@@ -242,6 +255,8 @@ export async function getMyWorkoutHistory() {
         maxReps: m.maxReps,
         volume: round(m.volume),
         est1rm: m.est1rm != null ? round(m.est1rm) : null,
+        bestSet: m.bestSet,
+        setDetails: m.setDetails.sort((a, b) => a.setNumber - b.setNumber),
       })
     }
   }
@@ -277,6 +292,14 @@ export async function getMyWorkoutHistory() {
     },
     error: null,
   }
+}
+
+/** Historial del asesorado autenticado. */
+export async function getMyWorkoutHistory() {
+  if (!isSupabaseConfigured) return { data: null, error: null }
+  const { client, error } = await resolveClient()
+  if (!client) return { data: null, error }
+  return getWorkoutHistory(client.id)
 }
 
 /**
@@ -323,7 +346,7 @@ export async function saveWorkoutSession({ workoutPlanId, dayKey, dayName, notes
   const rows = []
   for (const ex of exercises ?? []) {
     for (const s of ex.sets ?? []) {
-      const hasData = s.weight != null || s.reps != null
+      const hasData = s.weight != null || s.reps != null || s.rir != null
       if (!hasData) continue
       rows.push({
         session_id: session.id,
@@ -342,7 +365,7 @@ export async function saveWorkoutSession({ workoutPlanId, dayKey, dayName, notes
   // Sin series cargadas: borrar la sesión vacía para no ensuciar la tabla.
   if (rows.length === 0) {
     await supabase.from('workout_sessions').delete().eq('id', session.id)
-    return { error: new Error('No cargaste ninguna serie con peso o repeticiones.') }
+    return { error: new Error('No cargaste ninguna serie con peso, repeticiones o RIR.') }
   }
 
   const { error: lErr } = await supabase.from('workout_exercise_logs').insert(rows)

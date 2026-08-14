@@ -1,5 +1,11 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient'
 
+/** Usuario corto para clientes; los emails reales del coach siguen funcionando. */
+export function resolveLoginEmail(username) {
+  const normalized = username.trim().toLowerCase()
+  return normalized.includes('@') ? normalized : `${normalized}@asesorados.local`
+}
+
 /**
  * Inicia sesión con email y password.
  * En modo demo retorna un error descriptivo.

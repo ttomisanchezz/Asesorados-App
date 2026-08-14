@@ -105,7 +105,7 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
     const next = sets.map((s, k) => (k === i ? { ...s, [field]: value } : s))
     onChange(next)
   }
-  const addSet = () => onChange([...sets, { weight: '', reps: '' }])
+  const addSet = () => onChange([...sets, { weight: '', reps: '', rir: '' }])
   const removeSet = (i) => onChange(sets.length > 1 ? sets.filter((_, k) => k !== i) : sets)
 
   return (
@@ -130,6 +130,7 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
           <span className="w-12 shrink-0">Serie</span>
           <span className="flex-1 text-center">Peso (kg)</span>
           <span className="flex-1 text-center">Reps</span>
+          <span className="flex-1 text-center">RIR real</span>
           <span className="w-6 shrink-0" />
         </div>
         {sets.map((s, i) => {
@@ -137,6 +138,7 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
           const prevSet = last?.sets?.[i + 1]
           const prevWeight = prevSet?.weight ?? null
           const prevReps = prevSet?.reps ?? null
+          const prevRir = prevSet?.rir ?? null
           return (
           <div key={i} className="flex items-center gap-2">
             <span className="flex h-9 w-12 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-xs font-semibold text-slate-400">
@@ -160,6 +162,17 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
               onChange={(e) => setRow(i, 'reps', e.target.value)}
               placeholder={prevReps != null ? String(prevReps) : '—'}
               aria-label={`Repeticiones serie ${i + 1} de ${exercise.name}${prevReps != null ? ` (última vez ${prevReps} reps)` : ''}`}
+              className="h-9 w-full flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-center text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
+            />
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              min="0"
+              value={s.rir ?? ''}
+              onChange={(e) => setRow(i, 'rir', e.target.value)}
+              placeholder={prevRir != null ? String(prevRir) : '—'}
+              aria-label={`RIR real serie ${i + 1} de ${exercise.name}${prevRir != null ? ` (última vez ${prevRir})` : ''}`}
               className="h-9 w-full flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-center text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-600 focus:border-accent/50 focus-visible:ring-2 focus-visible:ring-accent/40"
             />
             <button
@@ -190,7 +203,7 @@ function ExerciseLogger({ exercise, index, last, sets, onChange }) {
 function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved, userId }) {
   const [open, setOpen] = useState(defaultOpen)
   const [logging, setLogging] = useState(false)
-  const [form, setForm] = useState([]) // por ejercicio: [{ weight, reps }]
+  const [form, setForm] = useState([]) // por ejercicio: [{ weight, reps, rir }]
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null) // { type, text }
@@ -201,7 +214,7 @@ function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved, userId }) {
   const draftKey = draftKeyFor({ userId, planId, dayKey: day.day })
 
   const defaultSetsFor = (ex) =>
-    Array.from({ length: parseSetsCount(ex.sets) }, () => ({ weight: '', reps: '' }))
+    Array.from({ length: parseSetsCount(ex.sets) }, () => ({ weight: '', reps: '', rir: '' }))
 
   // Borrador sin terminar de este día (solo en modo lectura). Derivado del
   // storage: se recalcula al cambiar de día o al salir del modo registro.
@@ -254,13 +267,13 @@ function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved, userId }) {
         setNumber: si + 1,
         weight: toDec(s.weight),
         reps: toInt(s.reps),
-        rir: null,
+        rir: toDec(s.rir),
       })),
     }))
 
-    const anyData = payloadExercises.some((ex) => ex.sets.some((s) => s.weight != null || s.reps != null))
+    const anyData = payloadExercises.some((ex) => ex.sets.some((s) => s.weight != null || s.reps != null || s.rir != null))
     if (!anyData) {
-      setMsg({ type: 'error', text: 'Cargá al menos una serie con peso o repeticiones.' })
+      setMsg({ type: 'error', text: 'Cargá al menos una serie con peso, repeticiones o RIR.' })
       return
     }
 
@@ -365,7 +378,7 @@ function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved, userId }) {
             <>
               <div className="mb-3 flex items-center gap-2 text-xs font-medium text-slate-400">
                 <ClipboardList size={14} className="text-accent" />
-                Registrá peso y reps de cada serie. Intentá igualar o superar tu última vez con buena técnica.
+                Registrá peso, reps y el RIR real de cada serie. Priorizá siempre una buena técnica.
               </div>
 
               <div className="flex flex-col gap-2">
@@ -375,7 +388,7 @@ function DayAccordion({ day, defaultOpen, planId, lastLogs, onSaved, userId }) {
                     exercise={ex}
                     index={i}
                     last={lastLogs[ex.name]}
-                    sets={form[i] ?? [{ weight: '', reps: '' }]}
+                    sets={form[i] ?? [{ weight: '', reps: '', rir: '' }]}
                     onChange={(next) => setForm((f) => f.map((s, k) => (k === i ? next : s)))}
                   />
                 ))}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Zap, Eye, EyeOff, AlertCircle, Lock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { isSupabaseConfigured } from '../lib/supabaseClient'
+import { resolveLoginEmail } from '../services/authService'
 
 /**
  * Convierte el usuario ingresado en un email interno de Supabase.
@@ -16,13 +17,6 @@ import { isSupabaseConfigured } from '../lib/supabaseClient'
  *   'VALENTINA'           → 'valentina@asesorados.local'  (normalizado a lowercase)
  *   'coach@gmail.com'     → 'coach@gmail.com'             (email real intacto)
  */
-function resolveEmail(username) {
-  const normalized = username.trim().toLowerCase()
-  return normalized.includes('@')
-    ? normalized
-    : `${normalized}@asesorados.local`
-}
-
 export default function Login() {
   const navigate = useNavigate()
   const { signIn, session, role } = useAuth()
@@ -48,7 +42,7 @@ export default function Login() {
     setLoading(true)
     setError(null)
 
-    const email = resolveEmail(username)
+    const email = resolveLoginEmail(username)
     const { error: authError } = await signIn(email, password)
 
     if (authError) {

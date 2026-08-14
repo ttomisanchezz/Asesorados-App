@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Search, Users } from 'lucide-react'
+import { Search, Users, UserPlus } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Layout from '../components/layout/Layout'
 import PageHeader from '../components/ui/PageHeader'
 import ClientCard from '../components/ui/ClientCard'
 import EmptyState from '../components/ui/EmptyState'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { getClients } from '../services/clientService'
+import Button from '../components/ui/Button'
+import Modal from '../components/coach/Modal'
+import NewClientWizard from '../components/coach/NewClientWizard'
 
 const FILTERS = [
   { label: 'Todos', value: 'all' },
@@ -15,10 +19,18 @@ const FILTERS = [
 ]
 
 export default function Clients() {
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
   const [filter, setFilter]   = useState('all')
+  const [creating, setCreating] = useState(searchParams.get('new') === '1')
+
+  const closeWizard = () => {
+    setCreating(false)
+    if (searchParams.has('new')) setSearchParams({}, { replace: true })
+  }
 
   useEffect(() => {
     getClients()
@@ -43,7 +55,9 @@ export default function Clients() {
       <PageHeader
         title="Asesorados"
         subtitle={loading ? 'Cargando...' : `${activeCount} activos · ${clients.length} total`}
-      />
+      >
+        <Button icon={UserPlus} onClick={() => setCreating(true)}>Nuevo asesorado</Button>
+      </PageHeader>
 
       {/* Search + Filter */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -94,6 +108,10 @@ export default function Clients() {
           ))}
         </div>
       )}
+
+      <Modal open={creating} onClose={closeWizard} title="Nuevo asesorado" subtitle="Ficha, acceso y planes iniciales">
+        <NewClientWizard onCreated={(client) => { closeWizard(); navigate(`/clients/${client.id}`) }} />
+      </Modal>
     </Layout>
   )
 }

@@ -42,6 +42,18 @@ describe('clientService.normalizeClient (vía getClients)', () => {
     expect(data[0]).toEqual(mockShape)
   })
 
+  it('expone el rango de peso informado sin convertirlo a un peso numérico', async () => {
+    const rangeRow = {
+      ...snakeRow,
+      weight: null,
+      internal_notes: 'Peso informado: 40–45 kg (rango aproximado, pendiente de confirmar).',
+    }
+    state.sb = makeSupabase({ tables: { clients: { data: [rangeRow], error: null } } })
+    const { data } = await getClients()
+    expect(data[0].weight).toBeNull()
+    expect(data[0].weightRange).toBe('40–45')
+  })
+
   it('propaga el error de Supabase y deja data en null', async () => {
     state.sb = makeSupabase({ tables: { clients: { data: null, error: { message: 'boom' } } } })
     const { data, error } = await getClients()

@@ -187,6 +187,7 @@ export default function MiPanel() {
   const progressPoints = progress?.points ?? []
   const lastPoint = progressPoints.length ? progressPoints[progressPoints.length - 1] : null
   const currentWeight = lastPoint?.weight ?? client.weight ?? null
+  const reportedWeightRange = currentWeight == null ? client.weightRange : null
   const currentWeightDate = lastPoint?.iso ?? null
 
   // Adherencia nutricional = check-in de esta semana con dato de adherencia.
@@ -255,9 +256,13 @@ export default function MiPanel() {
             <MetricCard
               icon={Scale}
               label="Peso actual"
-              value={currentWeight}
+              value={currentWeight ?? reportedWeightRange}
               unit="kg"
-              hint={currentWeightDate ? `Último registro · ${fmtShortDate(currentWeightDate)}` : 'Último registro cargado'}
+              hint={currentWeightDate
+                ? `Último registro · ${fmtShortDate(currentWeightDate)}`
+                : reportedWeightRange
+                  ? 'Rango informado · pendiente de confirmar'
+                  : 'Último registro cargado'}
               emptyHint="Cargá tu peso en Mi progreso"
             />
             <MetricCard

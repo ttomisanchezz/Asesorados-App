@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Dumbbell, Users, ArrowRight } from 'lucide-react'
+import { Dumbbell, Users, ArrowRight, Pencil, Plus, History } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import PageHeader from '../components/ui/PageHeader'
 import SectionCard from '../components/ui/SectionCard'
@@ -9,7 +9,12 @@ import ClientPicker from '../components/ui/ClientPicker'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { getClients } from '../services/clientService'
-import { getWorkoutPlan } from '../services/workoutService'
+import {
+  createWorkoutPlanVersion, getWorkoutPlan, getWorkoutPlanHistory, updateWorkoutPlanVersion,
+} from '../services/workoutService'
+import Modal from '../components/coach/Modal'
+import WorkoutPlanEditor from '../components/coach/WorkoutPlanEditor'
+import WeeklyTrainingView from '../components/coach/WeeklyTrainingView'
 
 export default function Training() {
   const navigate = useNavigate()
@@ -17,6 +22,10 @@ export default function Training() {
   const [selected, setSelected] = useState(null)
   // { id, data } — el loading se deriva comparando id con selected (sin setState sync).
   const [planRes, setPlanRes] = useState(null)
+  const [historyRes, setHistoryRes] = useState(null)
+  const [editor, setEditor] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -35,14 +44,32 @@ export default function Training() {
   useEffect(() => {
     if (!selected) return
     let active = true
-    getWorkoutPlan(selected)
-      .then(({ data }) => { if (active) setPlanRes({ id: selected, data: data ?? null }) })
+    Promise.all([getWorkoutPlan(selected), getWorkoutPlanHistory(selected)])
+      .then(([planResult, historyResult]) => {
+        if (!active) return
+        setPlanRes({ id: selected, data: planResult.data ?? null })
+        setHistoryRes({ id: selected, data: historyResult.data ?? [] })
+      })
       .catch(() => { if (active) setPlanRes({ id: selected, data: null }) })
     return () => { active = false }
   }, [selected])
 
   const planLoading = selected != null && planRes?.id !== selected
   const plan = planRes?.id === selected ? planRes.data : null
+  const history = historyRes?.id === selected ? historyRes.data : []
+
+  const savePlan = async (payload) => {
+    setSaving(true); setSaveError('')
+    const result = editor.mode === 'new'
+      ? await createWorkoutPlanVersion(selected, payload)
+      : await updateWorkoutPlanVersion(editor.plan.id, payload)
+    setSaving(false)
+    if (result.error) return setSaveError(result.error.message || 'No se pudo guardar la rutina.')
+    const [activeResult, historyResult] = await Promise.all([getWorkoutPlan(selected), getWorkoutPlanHistory(selected)])
+    setPlanRes({ id: selected, data: activeResult.data ?? null })
+    setHistoryRes({ id: selected, data: historyResult.data ?? [] })
+    setEditor(null)
+  }
 
   if (clients === null) {
     return (
@@ -59,7 +86,9 @@ export default function Training() {
 
   return (
     <Layout>
-      <PageHeader title="Entrenamiento" subtitle="Rutina activa de cada asesorado" />
+      <PageHeader title="Entrenamiento" subtitle="Rutina, historial y rendimiento real">
+        {selected && <Button icon={Plus} onClick={() => setEditor({ mode: 'new', plan: plan || {} })}>Nueva versión</Button>}
+      </PageHeader>
 
       {clients.length === 0 ? (
         <EmptyState
@@ -70,6 +99,9 @@ export default function Training() {
       ) : (
         <>
           <ClientPicker clients={clients} selectedId={selected} onSelect={setSelected} />
+          {selected && <div className="mb-4"><WeeklyTrainingView key={selected} clientId={selected} /></div>}
+
+          {plan && <div className="mb-4 flex flex-wrap gap-2"><Button variant="secondary" icon={Pencil} onClick={() => setEditor({ mode: 'edit', plan })}>Editar rutina activa</Button><Button variant="ghost" icon={ArrowRight} onClick={() => navigate(`/clients/${selected}`)}>Ver ficha completa</Button></div>}
 
           {planLoading ? (
             <PageLoader label="Cargando rutina..." />
@@ -77,13 +109,9 @@ export default function Training() {
             <EmptyState
               icon={Dumbbell}
               title={`${client?.name?.split(' ')[0] || 'Este asesorado'} todavía no tiene rutina activa`}
-              description="Las rutinas se cargan vía scripts de importación. Cuando exista una rutina activa, la vas a ver acá."
+              description="Creá la primera versión de la rutina desde este panel."
               action={
-                client && (
-                  <Button variant="secondary" size="sm" iconRight={ArrowRight} onClick={() => navigate(`/clients/${client.id}`)}>
-                    Ver ficha completa
-                  </Button>
-                )
+                <Button size="sm" icon={Plus} onClick={() => setEditor({ mode: 'new', plan: {} })}>Crear rutina</Button>
               }
             />
           ) : (
@@ -148,8 +176,17 @@ export default function Training() {
               )}
             </div>
           )}
+
+          {!planLoading && history.length > 0 && (
+            <div className="mt-4"><SectionCard title="Historial de versiones" subtitle="Editar una versión anterior no la reactiva" action={<History size={16} className="text-slate-500" />}><div className="flex flex-col gap-2">{history.map((version, index) => <div key={version.id || index} className="flex flex-col gap-2 rounded-xl bg-white/[0.025] p-3 sm:flex-row sm:items-center"><div className="flex-1"><div className="text-sm font-medium text-white">{version.plan || `Rutina ${history.length - index}`}</div><div className="text-xs text-slate-500">{version.createdAt ? new Date(version.createdAt).toLocaleDateString('es-AR') : 'Sin fecha'} · {version.days?.length ?? 0} días</div></div>{version.active && <span className="rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-400">ACTIVA</span>}<Button variant="ghost" size="sm" icon={Pencil} onClick={() => setEditor({ mode: 'edit', plan: version })}>Editar</Button></div>)}</div></SectionCard></div>
+          )}
         </>
       )}
+
+      <Modal open={Boolean(editor)} onClose={() => { setEditor(null); setSaveError('') }} title={editor?.mode === 'new' ? 'Nueva versión de rutina' : 'Editar versión de rutina'} subtitle={editor?.mode === 'new' ? 'Al guardar, reemplazará a la rutina activa.' : editor?.plan?.active ? 'Estás editando la rutina activa.' : 'Esta versión histórica seguirá inactiva.'}>
+        {editor && <WorkoutPlanEditor key={`${editor.mode}-${editor.plan?.id || 'new'}`} initialPlan={editor.plan} onSubmit={savePlan} busy={saving} submitLabel={editor.mode === 'new' ? 'Crear y activar versión' : 'Guardar cambios'} />}
+        {saveError && <p className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/[0.06] p-3 text-sm text-rose-300">{saveError}</p>}
+      </Modal>
     </Layout>
   )
 }

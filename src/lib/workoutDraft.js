@@ -106,14 +106,16 @@ export function removeDraft(key) {
   }
 }
 
-/** ¿El borrador tiene algo que valga la pena guardar/ofrecer? (peso, reps o nota) */
+/** ¿El borrador tiene algo que valga la pena guardar/ofrecer? (peso, reps, RIR o nota) */
 export function draftHasData({ exercises, note } = {}) {
   if (typeof note === 'string' && note.trim() !== '') return true
   if (!exercises) return false
   return Object.values(exercises).some(
     (sets) =>
       Array.isArray(sets) &&
-      sets.some((s) => String(s?.weight ?? '') !== '' || String(s?.reps ?? '') !== ''),
+      sets.some((s) =>
+        String(s?.weight ?? '') !== '' || String(s?.reps ?? '') !== '' || String(s?.rir ?? '') !== '',
+      ),
   )
 }
 

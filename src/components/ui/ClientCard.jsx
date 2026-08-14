@@ -63,7 +63,7 @@ export default function ClientCard({ client }) {
           <div className="flex items-center gap-1.5 text-slate-500 text-xs">
             <TrendingUp size={12} />
             <span>
-              {[client.weight != null ? `${client.weight} kg` : null, client.objective || null]
+              {[client.weight != null ? `${client.weight} kg` : client.weightRange ? `${client.weightRange} kg` : null, client.objective || null]
                 .filter(Boolean).join(' · ') || 'Sin datos de peso'}
             </span>
           </div>

@@ -62,7 +62,7 @@ export function nutritionAdherencePct(complianceRows) {
 }
 
 /**
- * Adherencia semanal de un conjunto de clientes en 4 queries batcheadas.
+ * Adherencia semanal de un conjunto de clientes en queries batcheadas.
  * Devuelve un mapa { [clientId]: { nutrition, training, trainingDone, trainingPlanned } }
  * donde nutrition/training son % (0-100) o null si no hay datos para calcular.
  */
@@ -77,9 +77,13 @@ export async function getWeeklyAdherenceMap(clientIds) {
 
   // allSettled + fallback a []: si una query falla (RLS, red), el resto de la
   // adherencia igual se calcula y el caller conserva sus valores actuales.
-  const [sessions, plans, compliance, checkins] = await Promise.allSettled([
+  const latestActivityRequest = typeof supabase.rpc === 'function'
+    ? supabase.rpc('get_coach_client_latest_activity', { p_client_ids: ids })
+    : Promise.resolve({ data: [], error: null })
+
+  const [sessions, plans, compliance, checkins, foodLogs, mealChecks, progress, photos, latestActivity] = await Promise.allSettled([
     supabase.from('workout_sessions')
-      .select('client_id')
+      .select('client_id, performed_at')
       .in('client_id', ids)
       .gte('performed_at', weekStartIso),
     supabase.from('workout_plans')
@@ -87,14 +91,31 @@ export async function getWeeklyAdherenceMap(clientIds) {
       .in('client_id', ids)
       .eq('active', true),
     supabase.from('nutrition_compliance')
-      .select('client_id, status, meals_done, meals_total')
+      .select('client_id, status, meals_done, meals_total, log_date, created_at')
       .in('client_id', ids)
       .gte('log_date', weekStartDate),
     supabase.from('checkins')
-      .select('client_id, nutrition_adherence, training_adherence')
+      .select('client_id, nutrition_adherence, training_adherence, created_at')
       .in('client_id', ids)
       .gte('created_at', weekStartIso)
       .order('created_at', { ascending: false }),
+    supabase.from('nutrition_logs')
+      .select('client_id, logged_at')
+      .in('client_id', ids)
+      .gte('logged_at', weekStartIso),
+    supabase.from('nutrition_meal_checks')
+      .select('client_id, log_date, created_at')
+      .in('client_id', ids)
+      .gte('log_date', weekStartDate),
+    supabase.from('progress_metrics')
+      .select('client_id, created_at')
+      .in('client_id', ids)
+      .gte('created_at', weekStartIso),
+    supabase.from('checkin_photos')
+      .select('client_id, created_at')
+      .in('client_id', ids)
+      .gte('created_at', weekStartIso),
+    latestActivityRequest,
   ])
 
   const rowsOf = (settled) =>
@@ -104,6 +125,16 @@ export async function getWeeklyAdherenceMap(clientIds) {
   const planRows = rowsOf(plans)
   const complianceRows = rowsOf(compliance)
   const checkinRows = rowsOf(checkins)
+  const latestActivityRows = rowsOf(latestActivity)
+  const activityRows = [
+    ...sessionRows.map((row) => ({ ...row, activity_at: row.performed_at })),
+    ...complianceRows.map((row) => ({ ...row, activity_at: row.created_at || row.log_date })),
+    ...checkinRows.map((row) => ({ ...row, activity_at: row.created_at })),
+    ...rowsOf(foodLogs).map((row) => ({ ...row, activity_at: row.logged_at })),
+    ...rowsOf(mealChecks).map((row) => ({ ...row, activity_at: row.created_at || row.log_date })),
+    ...rowsOf(progress).map((row) => ({ ...row, activity_at: row.created_at })),
+    ...rowsOf(photos).map((row) => ({ ...row, activity_at: row.created_at })),
+  ]
 
   const map = {}
   for (const id of ids) {
@@ -114,12 +145,18 @@ export async function getWeeklyAdherenceMap(clientIds) {
     // Check-in más reciente de la semana (vienen ordenados desc).
     const weekCheckin = checkinRows.find((r) => r.client_id === id)
 
+    const lastActivityAt = latestActivityRows.find((row) => row.client_id === id)?.last_activity_at || activityRows
+      .filter((row) => row.client_id === id && row.activity_at)
+      .map((row) => row.activity_at)
+      .sort((a, b) => new Date(b) - new Date(a))[0] || null
+
     map[id] = {
       trainingDone: done,
       trainingPlanned: planned,
       training: trainingAdherencePct(done, planned) ?? weekCheckin?.training_adherence ?? null,
       nutrition: nutritionAdherencePct(weekCompliance) ?? weekCheckin?.nutrition_adherence ?? null,
     }
+    if (lastActivityAt) map[id].lastActivityAt = lastActivityAt
   }
   return map
 }

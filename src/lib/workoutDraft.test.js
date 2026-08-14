@@ -113,6 +113,10 @@ describe('draftHasData', () => {
     expect(draftHasData({ note: '', exercises: { Press: [{ weight: '40', reps: '' }] } })).toBe(true)
     expect(draftHasData({ note: '', exercises: { Press: [{ weight: '', reps: '10' }] } })).toBe(true)
   })
+  it('true si una serie solo tiene RIR, incluso RIR 0', () => {
+    expect(draftHasData({ note: '', exercises: { Press: [{ weight: '', reps: '', rir: '2' }] } })).toBe(true)
+    expect(draftHasData({ note: '', exercises: { Press: [{ weight: '', reps: '', rir: 0 }] } })).toBe(true)
+  })
 })
 
 describe('formToExercises / exercisesToForm', () => {

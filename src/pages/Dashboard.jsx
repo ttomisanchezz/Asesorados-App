@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Users, ClipboardCheck, AlertTriangle, TrendingUp, ArrowRight, AlertCircle,
+  Users, UserPlus, ClipboardCheck, AlertTriangle, TrendingUp, ArrowRight, AlertCircle,
+  Dumbbell, Utensils,
 } from 'lucide-react'
 import Layout from '../components/layout/Layout'
 import StatCard from '../components/ui/StatCard'
@@ -79,13 +80,16 @@ export default function Dashboard() {
   return (
     <Layout>
       {/* Greeting */}
-      <div className="mb-7">
-        <h1 className="text-2xl font-bold text-white tracking-tight">
-          {greeting()}, Coach <span className="text-gradient">👋</span>
-        </h1>
-        <p className="text-slate-500 text-sm mt-1 capitalize">
-          {new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
+      <div className="mb-7 flex flex-col gap-4 rounded-2xl border border-accent/15 bg-gradient-to-br from-accent/[0.10] via-[#111118] to-[#111118] p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">
+            {greeting()}, Coach <span className="text-gradient">👋</span>
+          </h1>
+          <p className="text-slate-500 text-sm mt-1 capitalize">
+            {new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+        </div>
+        <Button icon={UserPlus} onClick={() => navigate('/clients?new=1')}>Nuevo asesorado</Button>
       </div>
 
       {error && (
@@ -282,6 +286,12 @@ export default function Dashboard() {
               <div className="flex flex-col gap-2">
                 <Button variant="secondary" className="w-full justify-start" icon={Users} onClick={() => navigate('/clients')}>
                   Ver asesorados
+                </Button>
+                <Button variant="secondary" className="w-full justify-start" icon={Utensils} onClick={() => navigate('/nutrition')}>
+                  Gestionar nutrición
+                </Button>
+                <Button variant="secondary" className="w-full justify-start" icon={Dumbbell} onClick={() => navigate('/training')}>
+                  Gestionar rutinas
                 </Button>
                 <Button variant="secondary" className="w-full justify-start" icon={ClipboardCheck} onClick={() => navigate('/checkins')}>
                   Ver check-ins
