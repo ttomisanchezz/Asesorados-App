@@ -76,6 +76,10 @@ const DAY4_EXERCISES = [
   { name: 'Remo sentada',                   sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // ya existía
   { name: 'Elevaciones laterales',          sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // ya existía
   { name: 'Peck deck',                      sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // ya existía
+  // Vuelve con el nombre EXACTO que tenía antes de sacarlo: así recupera su historial.
+  { name: 'Extensión tríceps c/barra',      sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
+  // Mismo nombre que el del Día 2, a propósito: es el mismo ejercicio y comparten historial.
+  { name: 'Curl bíceps martillo',           sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
 ]
 
 function readEnvLocal(name) {
