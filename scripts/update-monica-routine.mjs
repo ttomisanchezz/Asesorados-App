@@ -46,15 +46,15 @@ const FOCUS_BY_DAY = [
 ]
 
 // ── Día 4: ejercicios NUEVOS (reemplazan por completo a los actuales).
-//    reps/sets como string, igual que el resto de la rutina (ver buildExercise
-//    en import-clients.mjs). RIR queda null: no se especificó y no se inventa.
+//    reps/sets/rir como string, igual que el resto de la rutina (ver
+//    buildExercise en import-clients.mjs). RIR 0 en todos, indicado por el coach.
 const DAY4_INDEX = 3
 const DAY4_EXERCISES = [
-  { name: 'Jalón al pecho',               sets: '3', rir: null, reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Curl de bíceps en polea baja', sets: '3', rir: null, reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Remo sentado',                 sets: '3', rir: null, reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Elevaciones laterales',        sets: '3', rir: null, reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Peck deck',                    sets: '3', rir: null, reps: '6-10', notes: null, videoUrl: null },
+  { name: 'Jalón al pecho',               sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
+  { name: 'Curl de bíceps en polea baja', sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
+  { name: 'Remo sentado',                 sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
+  { name: 'Elevaciones laterales',        sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
+  { name: 'Peck deck',                    sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
 ]
 
 function readEnvLocal(name) {
@@ -93,7 +93,8 @@ function sameDay4(current) {
     const got = cur[i] ?? {}
     return String(got.name ?? '').trim().toLowerCase() === want.name.toLowerCase() &&
            String(got.sets ?? '') === want.sets &&
-           String(got.reps ?? '') === want.reps
+           String(got.reps ?? '') === want.reps &&
+           String(got.rir ?? '') === want.rir
   })
 }
 
@@ -146,7 +147,7 @@ async function main() {
   })
 
   console.log(`\n   Día 4 · Torso — ejercicios nuevos (${DAY4_EXERCISES.length}):`)
-  DAY4_EXERCISES.forEach((e, i) => console.log(`      ${i + 1}. ${e.name} — ${e.sets} series x ${e.reps} reps`))
+  DAY4_EXERCISES.forEach((e, i) => console.log(`      ${i + 1}. ${e.name} — ${e.sets} series x ${e.reps} reps · RIR ${e.rir}`))
 
   const old4 = days[DAY4_INDEX]?.exercises ?? []
   if (old4.length) {
@@ -155,7 +156,7 @@ async function main() {
   }
 
   console.log(`\n   Título nuevo: "${title}"`)
-  console.log('   Nota: los 5 ejercicios del Día 4 quedan con RIR vacío (no se especificó).')
+  console.log('   Nota: los 5 ejercicios del Día 4 van con RIR 0.')
 
   const alreadyDone = days.every((d, i) => labelOf(d) === FOCUS_BY_DAY[i]) &&
                       sameDay4(days[DAY4_INDEX]?.exercises) &&
