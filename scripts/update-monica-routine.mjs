@@ -56,6 +56,16 @@ const FOCUS_BY_DAY = [
 //    reps/sets/rir como string, igual que el resto de la rutina (ver
 //    buildExercise en import-clients.mjs). RIR 0 en todos, indicado por el coach.
 const DAY4_INDEX = 3
+
+// ── Reubicación de los bloques de pierna.
+//    El contenido NO se transcribe acá: se lee de la base y se mueve entero.
+//    Estas firmas identifican cada bloque por un ejercicio que solo aparece en él.
+const QUAD_SIGNATURE = 'sillon cuadricep'  // bloque de cuádriceps → Días 1 y 5
+const GLUTE_SIGNATURE = 'hip trust'        // bloque de glúteo     → Día 3
+
+// ── Día 2: se le suma este ejercicio. "Curl bíceps sentada" YA lo tiene, así
+//    que solo falta el martillo; se copian series/reps/RIR del que ya está.
+const DAY2_NEW_EXERCISE = { name: 'Curl bíceps martillo', sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }
 //    IMPORTANTE: los nombres van EXACTAMENTE como ya figuran en su rutina.
 //    workout_exercise_logs.exercise_name es texto libre y el "último peso" se
 //    busca por ese string (ver workoutLogService), así que renombrar un
@@ -100,6 +110,13 @@ function keyKind(key) {
 }
 const shortId = (id) => String(id).slice(0, 8)
 const labelOf = (d) => d?.focus || d?.day || '(sin foco)'
+const norm = (s) => String(s ?? '').trim().toLowerCase()
+const clone = (v) => structuredClone(v)
+// Ubica el día que contiene un ejercicio dado. Si hay varios (pasa después de
+// aplicar, con el bloque de cuádriceps duplicado en 1 y 5), devuelve el primero:
+// son idénticos, así que el resultado no cambia y la operación es idempotente.
+const findDayWith = (days, signature) =>
+  days.find((d) => (d.exercises ?? []).some((e) => norm(e.name).includes(signature)))
 
 // READ-ONLY: lista los clientes con su slug y los días de su rutina activa,
 // para identificar a mano bajo qué nombre está cargada Mónica.
@@ -160,17 +177,39 @@ async function resolveMonica(sb) {
   return null
 }
 
-// Compara los ejercicios actuales del día 4 contra el objetivo (idempotencia).
-function sameDay4(current) {
-  const cur = current ?? []
-  if (cur.length !== DAY4_EXERCISES.length) return false
-  return DAY4_EXERCISES.every((want, i) => {
-    const got = cur[i] ?? {}
-    return String(got.name ?? '').trim().toLowerCase() === want.name.toLowerCase() &&
-           String(got.sets ?? '') === want.sets &&
-           String(got.reps ?? '') === want.reps &&
-           String(got.rir ?? '') === want.rir
-  })
+// ── Transformación pura: recibe los días actuales y devuelve los nuevos.
+//    Los bloques de pierna se ubican por CONTENIDO, no por posición: se leen de
+//    la base tal como están (series, RIR y notas incluidas) y se reubican
+//    enteros. Así no se transcriben a mano y la operación es idempotente:
+//    después de aplicar, las firmas siguen resolviendo al mismo bloque.
+//    Exportada para poder probarla sin tocar la DB.
+export function buildPlan(days) {
+  const quadDay = findDayWith(days, QUAD_SIGNATURE)
+  const gluteDay = findDayWith(days, GLUTE_SIGNATURE)
+  if (!quadDay) exit(`No encontré el bloque de cuádriceps: ningún día tiene "${QUAD_SIGNATURE}".\n` +
+    '   Corré --show y decime en qué día quedó; sin eso no reubico nada a ciegas.')
+  if (!gluteDay) exit(`No encontré el bloque de glúteo: ningún día tiene "${GLUTE_SIGNATURE}".\n` +
+    '   Corré --show y decime en qué día quedó; sin eso no reubico nada a ciegas.')
+
+  const quadExercises = clone(quadDay.exercises ?? [])
+  const gluteExercises = clone(gluteDay.exercises ?? [])
+
+  // Día 2: se conserva entero y se le suma el curl martillo si todavía no está.
+  const day2Exercises = clone(days[1]?.exercises ?? [])
+  if (!day2Exercises.some((e) => norm(e.name).includes('martillo'))) day2Exercises.push(clone(DAY2_NEW_EXERCISE))
+
+  const exercisesFor = (i) => {
+    if (i === 0) return quadExercises
+    if (i === 1) return day2Exercises
+    if (i === 2) return gluteExercises
+    if (i === DAY4_INDEX) return clone(DAY4_EXERCISES)
+    return clone(quadExercises) // Día 5: copia del Día 1
+  }
+  const nextDays = days.map((d, i) => ({
+    ...d, day: d.day || `Día ${i + 1}`, focus: FOCUS_BY_DAY[i], exercises: exercisesFor(i),
+  }))
+  const title = `Rutina ${nextDays.length} días — ${nextDays.map((d) => d.focus).join(' / ')}`.slice(0, 180)
+  return { nextDays, title }
 }
 
 async function main() {
@@ -236,36 +275,43 @@ async function main() {
     `Su rutina activa tiene ${days.length} día(s) y el cambio pedido describe ${FOCUS_BY_DAY.length}.\n` +
     '   No agrego ni borro días por mi cuenta. Decime qué hacer con la diferencia y lo ajusto.')
 
-  // ── Nuevo array de días: solo cambia 'focus' salvo en el Día 4.
-  const nextDays = days.map((d, i) => {
-    const base = { ...d, day: d.day || `Día ${i + 1}`, focus: FOCUS_BY_DAY[i] }
-    return i === DAY4_INDEX ? { ...base, exercises: DAY4_EXERCISES } : base
-  })
-  const title = `Rutina ${nextDays.length} días — ${nextDays.map((d) => d.focus).join(' / ')}`.slice(0, 180)
+  const { nextDays, title } = buildPlan(days)
 
   console.log('\n── Cambios ─────────────────────────────────────────────')
-  days.forEach((d, i) => {
-    const from = labelOf(d), to = FOCUS_BY_DAY[i]
-    const nameChange = from !== to ? `"${from}" → "${to}"` : `"${to}" (nombre sin cambios)`
-    console.log(`   Día ${i + 1}: ${nameChange}` + (i === DAY4_INDEX ? '  · EJERCICIOS REEMPLAZADOS' : '  · ejercicios TAL CUAL'))
+  nextDays.forEach((next, i) => {
+    const before = days[i], from = labelOf(before), to = next.focus
+    console.log(`\n   DÍA ${i + 1}: ${from !== to ? `"${from}" → "${to}"` : `"${to}" (nombre sin cambios)`}`)
+    const beforeNames = (before.exercises ?? []).map((e) => norm(e.name))
+    const afterNames = next.exercises.map((e) => norm(e.name))
+    if (JSON.stringify(before.exercises ?? []) === JSON.stringify(next.exercises)) {
+      console.log('      ejercicios: sin cambios')
+      return
+    }
+    next.exercises.forEach((e, j) => {
+      const tag = beforeNames.includes(norm(e.name)) ? '' : '   ← NUEVO acá'
+      console.log(`      ${j + 1}. ${e.name} — ${e.sets ?? '?'} series x ${e.reps ?? '?'} reps` +
+        (e.rir != null && e.rir !== '' ? ` · RIR ${e.rir}` : '') + tag)
+    })
+    const dropped = (before.exercises ?? []).filter((e) => !afterNames.includes(norm(e.name)))
+    if (dropped.length) {
+      console.log(`      SE PIERDEN de este día (${dropped.length}):`)
+      dropped.forEach((e) => console.log(`         · ${e.name ?? '(sin nombre)'} — ${e.sets ?? '?'} series x ${e.reps ?? '?'} reps`))
+    }
   })
 
-  console.log(`\n   Día 4 · Torso — ejercicios nuevos (${DAY4_EXERCISES.length}):`)
-  DAY4_EXERCISES.forEach((e, i) => console.log(`      ${i + 1}. ${e.name} — ${e.sets} series x ${e.reps} reps · RIR ${e.rir}`))
+  console.log(`\n   Título nuevo: "${title}"`)
 
-  const old4 = days[DAY4_INDEX]?.exercises ?? []
-  if (old4.length) {
-    console.log(`\n   Día 4 — ejercicios que se PIERDEN (${old4.length}):`)
-    old4.forEach((e, i) => console.log(`      ${i + 1}. ${e.name ?? '(sin nombre)'} — ${e.sets ?? '?'} series x ${e.reps ?? '?'} reps`))
+  // Aviso: un ejercicio que desaparece de TODA la rutina pierde su historial de
+  // cargas (workout_exercise_logs se vincula por nombre, no por id).
+  const beforeAll = new Set(days.flatMap((d) => (d.exercises ?? []).map((e) => norm(e.name))))
+  const afterAll = new Set(nextDays.flatMap((d) => d.exercises.map((e) => norm(e.name))))
+  const goneForGood = [...beforeAll].filter((n) => !afterAll.has(n))
+  if (goneForGood.length) {
+    console.log(`\n   ⚠ Salen de la rutina por completo (${goneForGood.length}) y dejan de mostrar historial:`)
+    goneForGood.forEach((n) => console.log(`      · ${n}`))
   }
 
-  console.log(`\n   Título nuevo: "${title}"`)
-  console.log('   Nota: los 5 ejercicios del Día 4 van con RIR 0.')
-
-  const alreadyDone = days.every((d, i) => labelOf(d) === FOCUS_BY_DAY[i]) &&
-                      sameDay4(days[DAY4_INDEX]?.exercises) &&
-                      plan.title === title
-  if (alreadyDone) {
+  if (JSON.stringify(nextDays) === JSON.stringify(days) && plan.title === title) {
     console.log('\n✓ La rutina ya está en el estado pedido — no se reescribe nada.\n')
     return
   }
@@ -281,7 +327,9 @@ async function main() {
   console.log(`\n✓ APPLY OK — rutina de ${client.full_name} actualizada (${nextDays.length} días).\n`)
 }
 
-main().catch((e) => {
+// Solo corre si se ejecuta directo; importarlo (para testear buildPlan) no dispara nada.
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+if (isDirectRun) main().catch((e) => {
   console.error('\n✗ ' + e.message + '\n')
   if (/invalid api key/i.test(e.message)) {
     console.error('   "Invalid API key" = Supabase rechazó la credencial. Chequeá, en orden:\n' +
