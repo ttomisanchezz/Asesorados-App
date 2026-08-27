@@ -72,7 +72,26 @@ function readEnvLocal(name) {
   }
   return null
 }
-function exit(msg) { console.error('\n✗ ' + msg + '\n'); process.exit(1) }
+// Aborta sin process.exit(): cortar de golpe con handles async abiertos dispara
+// "Assertion failed ... uv_async" en Windows. Se propaga al catch de main().
+class Abort extends Error {}
+function exit(msg) { throw new Abort(msg) }
+
+// Identifica el TIPO de key sin imprimirla nunca. Este proyecto usa el formato
+// nuevo de Supabase (ver .env.example: sb_publishable_…), cuya contraparte
+// secreta es sb_secret_…, no el JWT legacy de service_role.
+function keyKind(key) {
+  if (key.startsWith('sb_secret_')) return { ok: true, label: 'secret key (sb_secret_…)' }
+  if (key.startsWith('sb_publishable_')) return { ok: false, label: 'la key PUBLICABLE (sb_publishable_…), que es la pública' }
+  if (key.startsWith('eyJ')) {
+    try {
+      const payload = JSON.parse(Buffer.from(key.split('.')[1], 'base64').toString('utf8'))
+      const role = String(payload.role ?? '(sin role)')
+      return { ok: role === 'service_role', label: `un JWT legacy con role="${role}"` }
+    } catch { return { ok: false, label: 'un JWT ilegible' } }
+  }
+  return { ok: false, label: 'de formato desconocido' }
+}
 const shortId = (id) => String(id).slice(0, 8)
 const labelOf = (d) => d?.focus || d?.day || '(sin foco)'
 
@@ -157,6 +176,13 @@ async function main() {
   if (missing.length) exit('Faltan variables de entorno:\n   - ' + missing.join('\n   - ') +
     '\n\n   PowerShell:\n     $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"\n     $env:SUPABASE_URL="https://<ref>.supabase.co"')
 
+  const kind = keyKind(key)
+  if (!kind.ok) {
+    console.warn('\n⚠ La key que pasaste parece ser ' + kind.label + '.' +
+      '\n   Hace falta la SECRETA del proyecto: Supabase → Project Settings → API Keys → secret (sb_secret_…).' +
+      '\n   Sigo igual por si me equivoco, pero si ves "Invalid API key" es por esto.')
+  }
+
   const sb = createClient(url, key, { auth: { persistSession: false } })
 
   if (LIST) { await listClients(sb); return }
@@ -231,4 +257,17 @@ async function main() {
   console.log(`\n✓ APPLY OK — rutina de ${client.full_name} actualizada (${nextDays.length} días).\n`)
 }
 
-main().catch((e) => exit(e.message))
+main().catch((e) => {
+  console.error('\n✗ ' + e.message + '\n')
+  if (/invalid api key/i.test(e.message)) {
+    console.error('   "Invalid API key" = Supabase rechazó la credencial. Chequeá, en orden:\n' +
+      '   1. Que sea la key SECRETA (sb_secret_…), no la publicable ni la anon.\n' +
+      '      Supabase → Project Settings → API Keys → secret.\n' +
+      '   2. Que sea del MISMO proyecto que SUPABASE_URL.\n' +
+      '   3. En PowerShell, comillas dobles y sin espacios ni saltos de línea:\n' +
+      '        $env:SUPABASE_SERVICE_ROLE_KEY="sb_secret_..."\n' +
+      '      Verificá que quedó entera (sin imprimirla):\n' +
+      '        $env:SUPABASE_SERVICE_ROLE_KEY.Length\n')
+  }
+  process.exitCode = 1
+})
