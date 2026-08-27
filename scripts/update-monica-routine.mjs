@@ -22,6 +22,7 @@
 // USO (PowerShell):
 //   $env:SUPABASE_SERVICE_ROLE_KEY="..."; $env:SUPABASE_URL="https://<ref>.supabase.co"
 //   node scripts/update-monica-routine.mjs --list           # READ-ONLY: lista los clientes
+//   node scripts/update-monica-routine.mjs --show           # READ-ONLY: vuelca su rutina completa
 //   node scripts/update-monica-routine.mjs                  # dry-run: muestra el antes/después
 //   node scripts/update-monica-routine.mjs --slug=<slug>    # si no figura como "monica"
 //   node scripts/update-monica-routine.mjs --apply          # escribe en la DB
@@ -38,6 +39,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const APPLY = process.argv.includes('--apply')
 const LIST = process.argv.includes('--list')
+const SHOW = process.argv.includes('--show')
 // --slug=<slug> apunta a un cliente puntual (si no figura como "monica").
 const TARGET_SLUG = (process.argv.find((a) => a.startsWith('--slug=')) ?? '').split('=').slice(1).join('=').trim() || null
 
@@ -211,6 +213,24 @@ async function main() {
   const days = Array.isArray(plan.days) ? plan.days : []
   console.log(`\nRutina activa: "${plan.title ?? '(sin título)'}"  · ${days.length} día(s) actuales:`)
   days.forEach((d, i) => console.log(`   ${i + 1}. ${labelOf(d)} — ${(d.exercises ?? []).length} ejercicios`))
+
+  // --show: vuelca la rutina completa y corta. READ-ONLY, no evalúa cambios.
+  if (SHOW) {
+    console.log('\n── Rutina actual, día por día ──────────────────────────')
+    days.forEach((d, i) => {
+      console.log(`\n   DÍA ${i + 1} · ${labelOf(d)}`)
+      const exs = d.exercises ?? []
+      if (!exs.length) { console.log('      (sin ejercicios)'); return }
+      exs.forEach((e, j) => {
+        const bits = [`${e.sets ?? '?'} series`, `${e.reps ?? '?'} reps`]
+        if (e.rir != null && e.rir !== '') bits.push(`RIR ${e.rir}`)
+        if (e.notes) bits.push(String(e.notes))
+        console.log(`      ${j + 1}. ${e.name ?? '(sin nombre)'} — ${bits.join(' · ')}`)
+      })
+    })
+    console.log('\n✓ Solo lectura: no se evaluó ni escribió ningún cambio.\n')
+    return
+  }
 
   if (days.length !== FOCUS_BY_DAY.length) exit(
     `Su rutina activa tiene ${days.length} día(s) y el cambio pedido describe ${FOCUS_BY_DAY.length}.\n` +
