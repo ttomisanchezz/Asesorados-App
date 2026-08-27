@@ -54,12 +54,16 @@ const FOCUS_BY_DAY = [
 //    reps/sets/rir como string, igual que el resto de la rutina (ver
 //    buildExercise en import-clients.mjs). RIR 0 en todos, indicado por el coach.
 const DAY4_INDEX = 3
+//    IMPORTANTE: los nombres van EXACTAMENTE como ya figuran en su rutina.
+//    workout_exercise_logs.exercise_name es texto libre y el "último peso" se
+//    busca por ese string (ver workoutLogService), así que renombrar un
+//    ejercicio le borra el historial de cargas. Solo "Jalón al pecho" es nuevo.
 const DAY4_EXERCISES = [
-  { name: 'Jalón al pecho',               sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Curl de bíceps en polea baja', sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Remo sentado',                 sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Elevaciones laterales',        sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
-  { name: 'Peck deck',                    sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null },
+  { name: 'Jalón al pecho',                 sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // nuevo
+  { name: 'Curl bíceps en polea de abajo',  sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // ya existía
+  { name: 'Remo sentada',                   sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // ya existía
+  { name: 'Elevaciones laterales',          sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // ya existía
+  { name: 'Peck deck',                      sets: '3', rir: '0', reps: '6-10', notes: null, videoUrl: null }, // ya existía
 ]
 
 function readEnvLocal(name) {
