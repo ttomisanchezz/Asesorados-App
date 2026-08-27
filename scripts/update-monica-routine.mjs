@@ -21,8 +21,10 @@
 //
 // USO (PowerShell):
 //   $env:SUPABASE_SERVICE_ROLE_KEY="..."; $env:SUPABASE_URL="https://<ref>.supabase.co"
-//   node scripts/update-monica-routine.mjs            # dry-run: muestra el antes/después
-//   node scripts/update-monica-routine.mjs --apply    # escribe en la DB
+//   node scripts/update-monica-routine.mjs --list           # READ-ONLY: lista los clientes
+//   node scripts/update-monica-routine.mjs                  # dry-run: muestra el antes/después
+//   node scripts/update-monica-routine.mjs --slug=<slug>    # si no figura como "monica"
+//   node scripts/update-monica-routine.mjs --apply          # escribe en la DB
 //
 // SALIDA: exit 0 si OK; exit 1 si no se pudo aplicar.
 // =============================================================================
@@ -35,6 +37,9 @@ import { createClient } from '@supabase/supabase-js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const APPLY = process.argv.includes('--apply')
+const LIST = process.argv.includes('--list')
+// --slug=<slug> apunta a un cliente puntual (si no figura como "monica").
+const TARGET_SLUG = (process.argv.find((a) => a.startsWith('--slug=')) ?? '').split('=').slice(1).join('=').trim() || null
 
 // ── Foco de cada día, por índice (0..4).
 const FOCUS_BY_DAY = [
@@ -71,17 +76,62 @@ function exit(msg) { console.error('\n✗ ' + msg + '\n'); process.exit(1) }
 const shortId = (id) => String(id).slice(0, 8)
 const labelOf = (d) => d?.focus || d?.day || '(sin foco)'
 
+// READ-ONLY: lista los clientes con su slug y los días de su rutina activa,
+// para identificar a mano bajo qué nombre está cargada Mónica.
+async function listClients(sb) {
+  const { data: clients, error } = await sb.from('clients')
+    .select('id, slug, full_name, status').order('slug')
+  if (error) exit('Error leyendo clients: ' + error.message)
+  if (!clients?.length) { console.log('\n(No hay clientes cargados.)\n'); return }
+
+  const { data: plans, error: pErr } = await sb.from('workout_plans')
+    .select('client_id, days').eq('active', true)
+  if (pErr) exit('Error leyendo workout_plans: ' + pErr.message)
+  const daysByClient = new Map((plans ?? []).map((p) => [p.client_id, (Array.isArray(p.days) ? p.days : []).length]))
+
+  console.log(`\n${clients.length} cliente(s):\n`)
+  const pad = Math.max(...clients.map((c) => (c.slug ?? '').length), 4)
+  console.log('   ' + 'slug'.padEnd(pad) + '  nombre'.padEnd(34) + '  rutina activa')
+  console.log('   ' + '─'.repeat(pad) + '  ' + '─'.repeat(32) + '  ' + '─'.repeat(14))
+  for (const c of clients) {
+    const n = daysByClient.get(c.id)
+    const plan = n == null ? 'sin rutina activa' : `${n} día(s)`
+    console.log('   ' + String(c.slug ?? '—').padEnd(pad) + '  ' + String(c.full_name ?? '—').padEnd(32).slice(0, 32) + '  ' + plan)
+  }
+  console.log('\nUsá el slug de Mónica así:\n   node scripts/update-monica-routine.mjs --slug=<slug>\n')
+}
+
 async function resolveMonica(sb) {
+  if (TARGET_SLUG) {
+    const { data, error } = await sb.from('clients')
+      .select('id, slug, full_name').eq('slug', TARGET_SLUG).maybeSingle()
+    if (error) exit(`Error buscando el slug "${TARGET_SLUG}": ` + error.message)
+    if (!data) exit(`No existe ningún cliente con slug "${TARGET_SLUG}".\n` +
+      '   Corré --list para ver los slugs reales.')
+    return data
+  }
+
   for (const slug of ['monica', 'mónica']) {
-    const { data } = await sb.from('clients').select('id, slug, full_name').eq('slug', slug).maybeSingle()
+    const { data, error } = await sb.from('clients')
+      .select('id, slug, full_name').eq('slug', slug).maybeSingle()
+    if (error) exit('Error buscando por slug: ' + error.message)
     if (data) return data
   }
-  const { data: byName } = await sb.from('clients')
-    .select('id, slug, full_name')
-    .or('full_name.ilike.%monica%,full_name.ilike.%mónica%')
-  if (byName?.length === 1) return byName[0]
-  if (byName?.length > 1) exit('Más de un cliente coincide con "Mónica": ' +
-    byName.map((c) => `${c.slug} (${c.full_name})`).join(', ') + '. Desambiguá antes de aplicar.')
+
+  // Una consulta por variante: un .or() con acentos puede fallar y, si no se
+  // mira el error, un fallo se confunde con "no existe".
+  const found = new Map()
+  for (const term of ['%monica%', '%mónica%', '%moni%']) {
+    const { data, error } = await sb.from('clients')
+      .select('id, slug, full_name').ilike('full_name', term)
+    if (error) exit(`Error buscando por nombre ("${term}"): ` + error.message)
+    for (const c of data ?? []) found.set(c.id, c)
+  }
+  const hits = [...found.values()]
+  if (hits.length === 1) return hits[0]
+  if (hits.length > 1) exit('Más de un cliente coincide con "Mónica": ' +
+    hits.map((c) => `${c.slug} (${c.full_name})`).join(', ') +
+    '.\n   Reejecutá con --slug=<el correcto>.')
   return null
 }
 
@@ -109,11 +159,15 @@ async function main() {
 
   const sb = createClient(url, key, { auth: { persistSession: false } })
 
+  if (LIST) { await listClients(sb); return }
+
   console.log('\n=== Rutina de Mónica: renombrar días + reemplazar Día 4  [' + (APPLY ? 'APPLY' : 'DRY-RUN') + '] ===')
 
   const client = await resolveMonica(sb)
   if (!client) exit('No encontré a Mónica en clients (probé slug monica/mónica y full_name).\n' +
-    '   Revisá el slug real en la DB y pasámelo, o cargá primero su ficha.')
+    '   Corré esto para ver bajo qué nombre está cargada:\n' +
+    '     node scripts/update-monica-routine.mjs --list\n' +
+    '   y después reejecutá con --slug=<el suyo>.')
   console.log(`Cliente: ${client.full_name}  (slug=${client.slug}, id=${shortId(client.id)}…)`)
 
   const { data: plan, error } = await sb.from('workout_plans')
